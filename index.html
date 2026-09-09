@@ -263,8 +263,8 @@ html[data-device="phone"] .foot-in .mid{display:none;}
   <div class="shade"></div>
   <div class="frame"><i></i><div class="laser"></div></div>
   <div class="top"><span class="t">Scan barcode</span><button class="x" id="scan-x" aria-label="Close scanner">×</button></div>
-  <div class="status" id="scan-status">Point at the barcode</div>
-  <div class="ctl"><button id="scan-flip">Flip camera</button></div>
+  <div class="status" id="scan-status">Starting camera…</div>
+  <div class="ctl"><button id="scan-torch" hidden>Torch</button><button id="scan-flip">Flip camera</button></div>
 </div>
 
 <script>
@@ -340,7 +340,7 @@ $('lockbtn').addEventListener('click', () => { try { localStorage.removeItem(KEY
 try { if (CODES.includes(localStorage.getItem(KEY))) { code = ''; unlock(false); } } catch (e) {}
 
 /* ---------- data + index ---------- */
-let S = null, ITEMS = [], STYLES = [], BY_BC = new Map();
+let S = null, ITEMS = [], STYLES = [], BY_BC = new Map(), BY_SKU = new Map();
 const SIZE_ORDER = ['XXS','XS','S','S/M','M','M/L','L','L/XL','XL','2XL','XXL','3XL','4XL','5XL','OSFM','OS','ONE SIZE'];
 function sizeOf(sku, parent) { return sku === parent ? 'One size' : sku.startsWith(parent + '-') ? sku.slice(parent.length + 1) : sku; }
 function sizeKey(s) {
@@ -354,7 +354,7 @@ const BIN_RE = /^[A-Z]{1,4}-\d{2,3}(-\d{2}(-\d{3})?)?$/i;   // A-041 / A-041-03 
 
 function buildIndex() {
   S = window.STOCK_SEED; ITEMS = S.items || [];
-  const byParent = new Map(); BY_BC = new Map();
+  const byParent = new Map(); BY_BC = new Map(); BY_SKU = new Map();
   for (const it of ITEMS) {
     const [sku, name, brand, bc, parent, floor, bins] = it;
     if (!byParent.has(parent)) byParent.set(parent, { parent, name, brand, sizes: [], wh: 0, floor: 0 });
@@ -363,6 +363,7 @@ function buildIndex() {
     p.sizes.push({ sku, size: sizeOf(sku, parent), bc, floor, bins, wh });
     p.wh += wh; p.floor += floor;
     if (bc) BY_BC.set(String(bc), it);
+    BY_SKU.set(sku.toUpperCase(), it);
   }
   for (const p of byParent.values()) {
     p.sizes.sort((a, b) => cmpSize(a.size, b.size));
@@ -389,6 +390,8 @@ function findBarcode(raw) {
   for (const k of cands) if (BY_BC.has(k)) return BY_BC.get(k);
   return null;
 }
+/* exact SKU (what a Code 128 tag encodes), tolerant of stray spaces/case */
+function findSku(raw) { return BY_SKU.get(String(raw).trim().toUpperCase().replace(/\s+/g, '')) || null; }
 
 /* ---------- search ---------- */
 function search(q) {
@@ -404,6 +407,9 @@ function search(q) {
       }
     if (bins.size) return { mode: 'bin', bins: [...bins.values()].sort((a, b) => a.bin.localeCompare(b.bin)) };
   }
+  // exact SKU (Code 128 tag) → that style, size highlighted
+  const skuHit = toks.length === 1 ? findSku(raw) : null;
+  if (skuHit) return { mode: 'search', styles: STYLES.filter(p => p.parent === skuHit[4]), hit: skuHit[0] };
   // barcode (typed, wedge-scanned or camera-scanned) → exactly that SKU's style, size highlighted
   if (/^\d{8,14}$/.test(raw)) {
     const it = findBarcode(raw);
@@ -498,66 +504,69 @@ async function boot() {
 }
 
 /* ---------- camera barcode scanner ----------
-   Native BarcodeDetector where the browser has it (Chrome/Android, newer Safari), otherwise
-   the vendored ZXing reader (vendor/zxing.min.js, loaded on first use). Product barcodes are
-   EAN-13 / UPC-A; a wedge scanner still works by just typing into the search box. */
-let scanning = false, zx = null, facing = 'environment', rafTimer = null, stream = null, lastHit = '';
-const canNative = 'BarcodeDetector' in window;
+   One code path, the BarcodeDetector API. iPhone/iPad Safari has NO native BarcodeDetector
+   (only the Camera app can read codes), and Chrome-on-Mac's is unreliable, so everywhere except
+   Android Chrome we use the vendored ponyfill (barcode-detector 3.2.2 → zxing-wasm 3.1.3, the C++
+   ZXing compiled to WebAssembly — fast and solid on 1D codes). Tags are Code 128 (SKU) or
+   EAN-13 / UPC-A (product barcode); both resolve to a style card. */
+const FORMATS = ['code_128', 'ean_13', 'upc_a', 'ean_8', 'upc_e', 'code_39', 'itf', 'qr_code'];
+let scanning = false, facing = 'environment', tickTimer = null, stream = null, lastHit = '', Detector = null, torchOn = false;
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error(src)); document.head.appendChild(s); }); }
+async function getDetector() {
+  if (Detector) return Detector;
+  if ('BarcodeDetector' in window && /Android/.test(navigator.userAgent)) {
+    try { const f = await BarcodeDetector.getSupportedFormats(); if (f.includes('code_128') && f.includes('ean_13')) return (Detector = window.BarcodeDetector); } catch (e) {}
+  }
+  await loadScript('vendor/barcode-detector.min.js');
+  BarcodeDetectionAPI.prepareZXingModule({ overrides: { locateFile: (p, prefix) => p.endsWith('.wasm') ? 'vendor/zxing_reader.wasm' : prefix + p }, fireImmediately: true });
+  return (Detector = BarcodeDetectionAPI.BarcodeDetector);
+}
 function setStatus(t, bad) { const s = $('scan-status'); s.className = 'status' + (bad ? ' bad' : ''); s.innerHTML = t; }
 async function openScanner() {
-  if (scanning) return; scanning = true; lastHit = '';
-  $('scan').hidden = false; setStatus('Point at the barcode');
+  if (scanning) return; scanning = true; lastHit = ''; torchOn = false;
+  $('scan').hidden = false; $('scan-torch').hidden = true; setStatus('Starting camera…');
   try {
-    if (canNative) await startNative(); else await startZXing();
+    const D = await getDetector();
+    const det = new D({ formats: FORMATS });
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+    const v = $('video'); v.srcObject = stream; await v.play();
+    try { const cap = stream.getVideoTracks()[0].getCapabilities && stream.getVideoTracks()[0].getCapabilities(); if (cap && cap.torch) $('scan-torch').hidden = false; } catch (e) {}
+    setStatus('Line the barcode up in the box');
+    const tick = async () => {
+      if (!scanning) return;
+      const t0 = Date.now();
+      try { if (v.readyState >= 2) { const codes = await det.detect(v); if (codes.length && scanning) onBarcode(codes[0].rawValue); } } catch (e) {}
+      tickTimer = setTimeout(tick, Math.max(40, 140 - (Date.now() - t0)));
+    };
+    tick();
   } catch (e) {
-    setStatus((e && e.name === 'NotAllowedError') ? 'Camera access was blocked — allow it in Settings › Safari › Camera' : 'Couldn\'t start the camera', true);
+    const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+    setStatus(denied ? 'Camera access was blocked — allow it in Settings › Safari › Camera, then try again'
+                     : (e && e.name === 'NotFoundError') ? 'No camera found on this device' : 'Couldn\'t start the camera', true);
   }
 }
 function closeScanner() {
   scanning = false; $('scan').hidden = true;
-  if (rafTimer) { clearTimeout(rafTimer); rafTimer = null; }
+  if (tickTimer) { clearTimeout(tickTimer); tickTimer = null; }
   if (stream) { stream.getTracks().forEach(tr => tr.stop()); stream = null; }
-  if (zx) { try { zx.reset(); } catch (e) {} }
   $('video').srcObject = null;
 }
-function onBarcode(codeText) {
-  const c = String(codeText).trim(); if (!c || c === lastHit) return; lastHit = c;
+function onBarcode(text) {
+  const c = String(text).trim(); if (!c || c === lastHit) return; lastHit = c;
   if (navigator.vibrate) navigator.vibrate(40);
-  const it = findBarcode(c);
+  const byBc = /^\d{8,14}$/.test(c) ? findBarcode(c) : null;
+  const it = byBc || findSku(c);
   setStatus((it ? 'Found' : 'Not in stock') + `<span class="last">${esc(c)}</span>`, !it);
-  setTimeout(() => { closeScanner(); input.value = c.replace(/\D/g, ''); LIMIT = 20; render(); }, it ? 350 : 900);
-}
-async function startNative() {
-  const det = new BarcodeDetector({ formats: ['ean_13', 'upc_a', 'ean_8', 'upc_e', 'code_128'] });
-  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
-  const v = $('video'); v.srcObject = stream; await v.play();
-  const tick = async () => {
-    if (!scanning) return;
-    try { const codes = await det.detect(v); if (codes.length) onBarcode(codes[0].rawValue); } catch (e) {}
-    rafTimer = setTimeout(tick, 120);
-  };
-  tick();
-}
-function loadZXing() {
-  if (window.ZXing) return Promise.resolve();
-  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'vendor/zxing.min.js'; s.onload = res; s.onerror = () => rej(new Error('zxing')); document.head.appendChild(s); });
-}
-async function startZXing() {
-  setStatus('Starting camera…'); await loadZXing();
-  const hints = new Map();
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_E, ZXing.BarcodeFormat.CODE_128]);
-  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-  zx = new ZXing.BrowserMultiFormatReader(hints, 200);
-  await zx.decodeFromConstraints({ video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }, $('video'), (result) => {
-    if (result && scanning) onBarcode(result.getText());
-  });
-  setStatus('Point at the barcode');
+  setTimeout(() => { closeScanner(); input.value = it ? (byBc ? c : it[0]) : c; LIMIT = 20; render(); }, it ? 300 : 900);
 }
 $('cam').addEventListener('click', openScanner);
 $('scan-x').addEventListener('click', closeScanner);
-$('scan-flip').addEventListener('click', async () => { facing = facing === 'environment' ? 'user' : 'environment'; closeScanner(); openScanner(); });
+$('scan-flip').addEventListener('click', () => { facing = facing === 'environment' ? 'user' : 'environment'; closeScanner(); openScanner(); });
+$('scan-torch').addEventListener('click', async () => { try { torchOn = !torchOn; await stream.getVideoTracks()[0].applyConstraints({ advanced: [{ torch: torchOn }] }); $('scan-torch').textContent = torchOn ? 'Torch off' : 'Torch'; } catch (e) {} });
 addEventListener('keydown', e => { if (e.key === 'Escape' && scanning) closeScanner(); });
 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) $('cam').hidden = true;
+// warm the decoder on touch devices so the first scan starts instantly (1 MB wasm, cached after)
+else if (document.documentElement.dataset.device !== 'desktop') setTimeout(() => { getDetector().catch(() => {}); }, 4000);
 </script>
 </body>
 </html>

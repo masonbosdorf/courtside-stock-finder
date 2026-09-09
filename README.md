@@ -23,7 +23,7 @@ tiny stock-meta.json every 60s, and re-fetches the seed only when asOf changes.
 | `stock-seed.js` / `stock-meta.json` | DATA ONLY, written by the bot |
 | `stock-fetch.js` | NetSuite → seed (bins at loc 2, floor at loc 22) |
 | `netsuite.js` / `creds.js` | shared with the sibling repos, plus `suiteqlAll()` offset paging |
-| `vendor/zxing.min.js` | camera barcode fallback for browsers without `BarcodeDetector` |
+| `vendor/barcode-detector.min.js` + `vendor/zxing_reader.wasm` | BarcodeDetector ponyfill (ZXing C++ → WebAssembly) used for camera scanning everywhere except Android Chrome; iOS Safari has no native barcode API |
 | `.github/workflows/sync.yml` | the cloud refresh |
 
 ## Access codes
