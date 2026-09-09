@@ -353,6 +353,21 @@ const cmpSize = (a, b) => { const A = sizeKey(a), B = sizeKey(b); return A[0] - 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const nice = s => String(s || '').toLowerCase().replace(/\b(\w)/g, c => c.toUpperCase()).replace(/\bDri-Fit\b/gi, 'Dri-FIT').replace(/'(\w)/g, (m, c) => "'" + c.toUpperCase()).replace(/\b(Nba|Wnba|Nfl|Mlb|Nhl|Ncaa|Usa|La|Ny|Ii|Iii|Iv|Xl|Gs|Ps|Td)\b/g, m => m.toUpperCase());
 const BIN_RE = /^[A-Z]{1,4}-\d{2,3}(-\d{2}(-\d{3})?)?$/i;   // A-041 / A-041-03 / A-041-03-011
+/* words: lower-case, split on anything that isn't a letter/digit/dot, dots kept only inside numbers (10.5)
+   so "G.T. CUT 3" → gt, cut, 3 and "HF2881-303-10" → hf2881, 303, 10 */
+const WORDS = s => String(s || '').toLowerCase().split(/[^a-z0-9.]+/).map(w => w.replace(/(?<!\d)\.|\.(?!\d)/g, '')).filter(Boolean);
+/* a query word matches a style word by prefix ("sabr" → sabrina, "hf2881" → hf2881), except numbers,
+   which must match a whole word — so "sabrina 4" is Sabrina 4, never the 4 inside a Sabrina 3 code */
+const matchTok = (words, t) => /^[\d.]+$/.test(t) ? words.includes(t) : words.some(w => w.startsWith(t));
+/* name-first: if every word matches in name/brand/style words, that's the answer; only otherwise
+   widen to SKUs, barcodes and bins (so "HF2881-303 10" still finds the size-10 SKU) */
+function matchStyles(text) {
+  const toks = WORDS(text); if (!toks.length) return [];
+  let out = STYLES.filter(p => toks.every(t => matchTok(p.nw, t)));
+  if (!out.length) out = STYLES.filter(p => toks.every(t => matchTok(p.aw, t)));
+  const pre = p => toks.some(t => p.parent.toLowerCase().startsWith(t)) ? 1 : 0;
+  return out.sort((a, b) => pre(b) - pre(a) || b.wh - a.wh);
+}
 
 function buildIndex() {
   S = window.STOCK_SEED; ITEMS = S.items || [];
@@ -369,7 +384,9 @@ function buildIndex() {
   }
   for (const p of byParent.values()) {
     p.sizes.sort((a, b) => cmpSize(a.size, b.size));
-    p.hay = (p.parent + ' ' + p.name + ' ' + p.brand + ' ' + p.sizes.map(s => s.sku + ' ' + s.bc + ' ' + s.bins.map(b => b[0]).join(' ')).join(' ')).toLowerCase();
+    // word index: name words (what people type for a model) vs everything incl. codes/barcodes/bins
+    p.nw = WORDS(p.name + ' ' + p.brand + ' ' + p.parent);
+    p.aw = p.nw.concat(WORDS(p.sizes.map(s => s.sku + ' ' + s.bc + ' ' + s.bins.map(b => b[0]).join(' ')).join(' ')));
   }
   STYLES = [...byParent.values()];
   BRANDS = [...new Set(ITEMS.map(i => i[2]).filter(Boolean))].sort();
@@ -424,7 +441,7 @@ function search(q) {
     if (!sz.sizes.length) return { mode: 'flat', rows: [], ...sz, needSizes: true };
     let pool;
     if (sz.brands.length) pool = ITEMS.filter(it => sz.brands.includes(it[2]));
-    else { const lt = sz.left.toLowerCase().split(/\s+/).filter(Boolean); const par = new Set(STYLES.filter(p => lt.every(t => p.hay.includes(t))).map(p => p.parent)); pool = ITEMS.filter(it => par.has(it[4])); }
+    else { const par = new Set(matchStyles(sz.left).map(p => p.parent)); pool = ITEMS.filter(it => par.has(it[4])); }
     const rows = pool.filter(it => sz.sizes.some(s => sizeEq(sizeOf(it[0], it[4]), s)));   // ITEMS is already in SKU order
     return { mode: 'flat', rows, ...sz };
   }
@@ -447,11 +464,7 @@ function search(q) {
     if (it) return { mode: 'search', styles: STYLES.filter(p => p.parent === it[4]), hit: it[0], bc: raw };
     return { mode: 'search', styles: [], nobc: raw };
   }
-  let styles = STYLES.filter(p => toks.every(t => p.hay.includes(t)));
-  // rank: parent-code prefix hits first, then by warehouse depth
-  const pre = p => toks.some(t => p.parent.toLowerCase().startsWith(t)) ? 1 : 0;
-  styles.sort((a, b) => pre(b) - pre(a) || b.wh - a.wh);
-  return { mode: 'search', styles };
+  return { mode: 'search', styles: matchStyles(raw) };
 }
 
 /* ---------- render ---------- */
