@@ -24,6 +24,8 @@ the tiny stock-meta.json every 60s, and re-fetches the seed only when asOf chang
 | `stock-seed.json` / `stock-meta.json` | DATA ONLY, written by the bot; the page caches the seed on-device and only refetches when meta says asOf changed |
 | `stock-fetch.js` | NetSuite → seed (bins at loc 2, floor at loc 22) |
 | `netsuite.js` / `creds.js` | shared with the sibling repos, plus `suiteqlAll()` offset paging |
+| `img/<style>.webp` | 192px product thumbnails, one per style-colour, cut from the Assets bank by `tools/build_thumbs.py` (filename = parent with anything outside `[A-Za-z0-9._-]` → `_`). Lazy-loaded per card; a missing file just shows a placeholder |
+| `tools/build_thumbs.py` | hero picker + thumbnail cutter (Nike view-code priority PHSLH000 → … , other brands first file / `Hero/` folder). Rerun after new imagery lands: `python3 tools/build_thumbs.py --all` then commit `img/` |
 | `vendor/barcode-detector.min.js` + `vendor/zxing_reader.wasm` | BarcodeDetector ponyfill (ZXing C++ → WebAssembly) used for camera scanning everywhere except Android Chrome; iOS Safari has no native barcode API |
 | `.github/workflows/sync.yml` | the cloud refresh |
 

@@ -98,8 +98,8 @@ html[data-device="phone"] .card.flat .whcol{display:none;}
 .card.flat td.prod{min-width:0;} .card.flat td.prod .nm{font-size:14px;}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;min-width:0;}
 .card.hit{border-color:rgba(70,224,138,0.45);box-shadow:0 0 0 1px rgba(70,224,138,0.15);}
-.card-h{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:clamp(14px,3vw,18px) clamp(14px,3vw,20px) 12px;}
-.card-h .who{min-width:0;}
+.card-h{display:flex;align-items:flex-start;gap:14px;padding:clamp(14px,3vw,18px) clamp(14px,3vw,20px) 12px;}
+.card-h .who{min-width:0;flex:1 1 auto;}
 .eyebrow{font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--faint);font-weight:700;display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
 .eyebrow .code{color:var(--muted);letter-spacing:0.08em;font-variant-numeric:tabular-nums;}
 .card-h h2{font-size:clamp(16px,4vw,20px);font-weight:700;letter-spacing:-0.005em;line-height:1.15;margin-top:6px;text-wrap:balance;}
@@ -128,6 +128,16 @@ td.qty.zero{color:var(--ghost);}
 td.floor{font-weight:700;font-size:15px;color:var(--muted);white-space:nowrap;width:1%;}
 td.floor.zero{color:var(--ghost);}
 
+.th{flex:0 0 auto;width:var(--th);height:var(--th);border-radius:10px;background:#fff;overflow:hidden;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);}
+.th img{width:100%;height:100%;object-fit:contain;display:block;}
+.th.none{background:var(--panel-2);}
+.th.none img{display:none;}
+.th.none::after{content:"";width:38%;height:38%;border:2px dashed var(--ghost);border-radius:6px;}
+:root{--th:52px;}
+html[data-device="tablet"]{--th:64px;} html[data-device="desktop"]{--th:64px;}
+.th.sm{--th:38px;border-radius:8px;}
+td.prod{display:flex;align-items:center;gap:10px;}
+td.prod .pt{min-width:0;}
 /* bin-mode card: one bin, many products */
 .card.binview .card-h h2{font-family:"Archivo Black",sans-serif;font-size:clamp(24px,6vw,34px);letter-spacing:-0.02em;}
 td.prod{min-width:0;}
@@ -467,6 +477,9 @@ function search(q) {
   return { mode: 'search', styles: matchStyles(raw) };
 }
 
+/* thumbnails: img/<parent with anything outside [A-Za-z0-9._-] → "_">.webp, lazy, placeholder on 404 */
+const thumbSrc = parent => 'img/' + String(parent).replace(/[^A-Za-z0-9._-]/g, '_') + '.webp';
+const thumb = (parent, sm) => `<span class="th${sm ? ' sm' : ''}"><img src="${thumbSrc(parent)}" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('none')"></span>`;
 /* ---------- render ---------- */
 let LIMIT = 20;
 const CAM_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8M10 8v8M13 8v8M17 8v8"/></svg>';
@@ -477,7 +490,7 @@ function styleCard(p, hit) {
     return `<tr class="${hit && s.sku === hit ? 'hl' : ''}"><td class="size">${esc(s.size)}</td><td class="bins">${bins}</td><td class="n qty ${s.wh ? 'ok' : 'zero'}">${s.wh || '—'}</td><td class="n floor ${s.floor ? '' : 'zero'}">${s.floor || '—'}</td></tr>`;
   }).join('');
   return `<section class="card${hit ? ' hit' : ''}">
-    <div class="card-h"><div class="who">
+    <div class="card-h">${thumb(p.parent)}<div class="who">
       <div class="eyebrow"><span>${esc(p.brand || '—')}</span><span class="code">${esc(p.parent)}</span></div>
       <h2>${esc(nice(p.name) || p.parent)}</h2>
     </div>
@@ -487,7 +500,7 @@ function styleCard(p, hit) {
 }
 function binCard(b) {
   const rows = b.rows.sort((x, y) => x.p.name.localeCompare(y.p.name) || cmpSize(x.s.size, y.s.size)).map(({ p, s, av }) =>
-    `<tr><td class="prod"><div class="nm">${esc(nice(p.name) || p.parent)}</div><div class="sk">${esc(p.brand || '—')} · ${esc(s.sku)}</div></td><td class="size">${esc(s.size)}</td><td class="n qty ok">${av}</td></tr>`).join('');
+    `<tr><td class="prod">${thumb(p.parent, true)}<div class="pt"><div class="nm">${esc(nice(p.name) || p.parent)}</div><div class="sk">${esc(p.brand || '—')} · ${esc(s.sku)}</div></div></td><td class="size">${esc(s.size)}</td><td class="n qty ok">${av}</td></tr>`).join('');
   return `<section class="card binview">
     <div class="card-h"><div class="who"><div class="eyebrow"><span>Bin</span><span class="code">${b.rows.length} SKU${b.rows.length === 1 ? '' : 's'}</span></div><h2>${esc(b.bin)}</h2></div>
     <div class="tot"><div><div class="v">${b.units}</div><div class="l">Units avail</div></div></div></div>
@@ -500,7 +513,7 @@ function flatCard(r) {
   const rows = r.rows.slice(0, LIMIT).map(it => {
     const [sku, name, brand, bc, parent, floor, bins] = it, w = bins.reduce((a, b) => a + b[1], 0);
     const chips = bins.length ? `<div class="stack">${bins.map(b => binChip(b[0], b[1])).join('')}</div>` : `<span class="none">—</span>`;
-    return `<tr><td class="prod"><div class="nm">${esc(nice(name) || parent)}</div><div class="sk">${esc(sku)}${r.brands.length > 1 ? ' · ' + esc(brand) : ''}</div></td><td class="size">${esc(sizeOf(sku, parent))}</td><td class="bins">${chips}</td><td class="n qty whcol ${w ? 'ok' : 'zero'}">${w || '—'}</td><td class="n floor ${floor ? '' : 'zero'}">${floor || '—'}</td></tr>`;
+    return `<tr><td class="prod">${thumb(parent, true)}<div class="pt"><div class="nm">${esc(nice(name) || parent)}</div><div class="sk">${esc(sku)}${r.brands.length > 1 ? ' · ' + esc(brand) : ''}</div></div></td><td class="size">${esc(sizeOf(sku, parent))}</td><td class="bins">${chips}</td><td class="n qty whcol ${w ? 'ok' : 'zero'}">${w || '—'}</td><td class="n floor ${floor ? '' : 'zero'}">${floor || '—'}</td></tr>`;
   }).join('');
   return `<section class="card flat">
     <div class="card-h"><div class="who"><div class="eyebrow"><span>${esc(label)}</span><span class="code">${r.rows.length} SKU${r.rows.length === 1 ? '' : 's'}</span></div><h2>Size ${esc(r.sizes.join(' / '))}</h2></div>
