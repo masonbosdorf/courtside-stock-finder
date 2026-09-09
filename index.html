@@ -93,7 +93,9 @@ html[data-device="phone"] .search-meta #hint{display:none;}
 /* ===== results ===== */
 .results{display:grid;grid-template-columns:1fr;gap:12px;align-items:start;}
 html[data-device="tablet"] .results,html[data-device="desktop"] .results{grid-template-columns:repeat(auto-fill,minmax(430px,1fr));gap:14px;}
-.results > .empty,.results > .more,.results > .loading{grid-column:1/-1;}
+.results > .empty,.results > .more,.results > .loading,.results > .card.flat{grid-column:1/-1;}
+html[data-device="phone"] .card.flat .whcol{display:none;}
+.card.flat td.prod{min-width:0;} .card.flat td.prod .nm{font-size:14px;}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;min-width:0;}
 .card.hit{border-color:rgba(70,224,138,0.45);box-shadow:0 0 0 1px rgba(70,224,138,0.15);}
 .card-h{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:clamp(14px,3vw,18px) clamp(14px,3vw,20px) 12px;}
@@ -287,7 +289,7 @@ function device() {
 }
 function applyDevice() {
   const d = device(); document.documentElement.dataset.device = d;
-  $('hint').innerHTML = d === 'desktop' ? 'Press <kbd>/</kbd> to search · tap a bin to see what else is in it · scanners just type + Enter'
+  $('hint').innerHTML = d === 'desktop' ? 'Press <kbd>/</kbd> to search · <b>brand - sizes</b> lists one size across a brand · tap a bin to see what else is in it'
                        : 'Tap a bin to see what else is in it';
 }
 applyDevice(); addEventListener('resize', applyDevice);
@@ -340,7 +342,7 @@ $('lockbtn').addEventListener('click', () => { try { localStorage.removeItem(KEY
 try { if (CODES.includes(localStorage.getItem(KEY))) { code = ''; unlock(false); } } catch (e) {}
 
 /* ---------- data + index ---------- */
-let S = null, ITEMS = [], STYLES = [], BY_BC = new Map(), BY_SKU = new Map();
+let S = null, ITEMS = [], STYLES = [], BY_BC = new Map(), BY_SKU = new Map(), BRANDS = [];
 const SIZE_ORDER = ['XXS','XS','S','S/M','M','M/L','L','L/XL','XL','2XL','XXL','3XL','4XL','5XL','OSFM','OS','ONE SIZE'];
 function sizeOf(sku, parent) { return sku === parent ? 'One size' : sku.startsWith(parent + '-') ? sku.slice(parent.length + 1) : sku; }
 function sizeKey(s) {
@@ -370,6 +372,7 @@ function buildIndex() {
     p.hay = (p.parent + ' ' + p.name + ' ' + p.brand + ' ' + p.sizes.map(s => s.sku + ' ' + s.bc + ' ' + s.bins.map(b => b[0]).join(' ')).join(' ')).toLowerCase();
   }
   STYLES = [...byParent.values()];
+  BRANDS = [...new Set(ITEMS.map(i => i[2]).filter(Boolean))].sort();
   $('f-styles').textContent = STYLES.length.toLocaleString();
   $('f-skus').textContent = ITEMS.length.toLocaleString();
   $('f-units').textContent = ITEMS.reduce((a, i) => a + i[6].reduce((x, b) => x + b[1], 0), 0).toLocaleString();
@@ -390,6 +393,24 @@ function findBarcode(raw) {
   for (const k of cands) if (BY_BC.has(k)) return BY_BC.get(k);
   return null;
 }
+/* size equality: 7 == 7.0, XXL == 2XL, one-size aliases */
+const SZ_ALIAS = { 'XXL': '2XL', 'XXXL': '3XL', 'XXXXL': '4XL', 'ONESIZE': 'OS', 'OSFM': 'OS', 'MISC': 'OS', 'O/S': 'OS' };
+function normSize(s) { s = String(s).toUpperCase().replace(/\s+/g, ''); s = SZ_ALIAS[s] || s; return /^[\d.]+$/.test(s) ? String(parseFloat(s)) : s; }
+const sizeEq = (a, b) => normSize(a) === normSize(b);
+/* brand names compared loosely: case, "&" vs "and", spaces and punctuation ignored → "mitchell and ness" == "MITCHELL & NESS" */
+const normBrand = s => String(s).toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, '');
+/* "<brand or words> - <size>[, <size>…]": the separator is a dash/colon with whitespace on at least one
+   side, so hyphenated brands (Li-Ning) and codes (HF2881-303) never split. Brand matches by prefix. */
+const SIZED_RE = /^(.*?\S)(?:\s+[-–—:]\s*|\s*[-–—:]\s+)(.*)$/;
+function parseSized(raw) {
+  const m = raw.match(SIZED_RE); if (!m) return null;
+  const left = m[1].trim(), right = m[2].trim();
+  const sizes = [...new Set(right.split(/[,\s]+/).filter(Boolean).map(s => s.toUpperCase()))];
+  const nl = normBrand(left);
+  let brands = nl ? BRANDS.filter(b => normBrand(b) === nl) : [];
+  if (!brands.length && nl) brands = BRANDS.filter(b => normBrand(b).startsWith(nl));
+  return { left, sizes, brands };
+}
 /* exact SKU (what a Code 128 tag encodes), tolerant of stray spaces/case */
 function findSku(raw) { return BY_SKU.get(String(raw).trim().toUpperCase().replace(/\s+/g, '')) || null; }
 
@@ -397,6 +418,16 @@ function findSku(raw) { return BY_SKU.get(String(raw).trim().toUpperCase().repla
 function search(q) {
   const raw = q.trim(); if (!raw) return { mode: 'idle' };
   const toks = raw.toLowerCase().split(/\s+/).filter(Boolean);
+  // "Nike - 7,8" / "New Era - M" / "sabrina 3 - 10": one flat list, requested sizes only, SKU order
+  const sz = parseSized(raw);
+  if (sz) {
+    if (!sz.sizes.length) return { mode: 'flat', rows: [], ...sz, needSizes: true };
+    let pool;
+    if (sz.brands.length) pool = ITEMS.filter(it => sz.brands.includes(it[2]));
+    else { const lt = sz.left.toLowerCase().split(/\s+/).filter(Boolean); const par = new Set(STYLES.filter(p => lt.every(t => p.hay.includes(t))).map(p => p.parent)); pool = ITEMS.filter(it => par.has(it[4])); }
+    const rows = pool.filter(it => sz.sizes.some(s => sizeEq(sizeOf(it[0], it[4]), s)));   // ITEMS is already in SKU order
+    return { mode: 'flat', rows, ...sz };
+  }
   // bin mode: the query is (a prefix of) a bin code → list everything in matching bins
   if (toks.length === 1 && BIN_RE.test(raw)) {
     const pre = raw.toUpperCase(), bins = new Map();
@@ -450,13 +481,40 @@ function binCard(b) {
     <div style="overflow-x:auto"><table><thead><tr><th>Product</th><th>Size</th><th class="n">Avail</th></tr></thead><tbody>${rows}</tbody></table></div>
   </section>`;
 }
+function flatCard(r) {
+  const label = r.brands.length ? r.brands.join(' · ') : `“${r.left}”`;
+  const wh = r.rows.reduce((a, it) => a + it[6].reduce((x, b) => x + b[1], 0), 0), fl = r.rows.reduce((a, it) => a + it[5], 0);
+  const rows = r.rows.slice(0, LIMIT).map(it => {
+    const [sku, name, brand, bc, parent, floor, bins] = it, w = bins.reduce((a, b) => a + b[1], 0);
+    const chips = bins.length ? `<div class="stack">${bins.map(b => binChip(b[0], b[1])).join('')}</div>` : `<span class="none">—</span>`;
+    return `<tr><td class="prod"><div class="nm">${esc(nice(name) || parent)}</div><div class="sk">${esc(sku)}${r.brands.length > 1 ? ' · ' + esc(brand) : ''}</div></td><td class="size">${esc(sizeOf(sku, parent))}</td><td class="bins">${chips}</td><td class="n qty whcol ${w ? 'ok' : 'zero'}">${w || '—'}</td><td class="n floor ${floor ? '' : 'zero'}">${floor || '—'}</td></tr>`;
+  }).join('');
+  return `<section class="card flat">
+    <div class="card-h"><div class="who"><div class="eyebrow"><span>${esc(label)}</span><span class="code">${r.rows.length} SKU${r.rows.length === 1 ? '' : 's'}</span></div><h2>Size ${esc(r.sizes.join(' / '))}</h2></div>
+    <div class="tot"><div class="${wh ? '' : 'zero'}"><div class="v">${wh}</div><div class="l">Warehouse</div></div><div class="${fl ? '' : 'zero'}"><div class="v">${fl}</div><div class="l">Floor</div></div></div></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Product</th><th>Size</th><th>Bin · avail</th><th class="n whcol">Warehouse</th><th class="n">Floor</th></tr></thead><tbody>${rows}</tbody></table></div>
+  </section>`;
+}
 function render() {
   if (!S) return;
   const q = $('q').value; $('searchbox').classList.toggle('has', !!q);
   const r = search(q), out = $('results'), meta = $('meta');
+  if (r.mode === 'flat' && LIMIT < 60) LIMIT = 60;
   if (r.mode === 'idle') {
     meta.textContent = 'Type or scan to search';
-    out.innerHTML = `<div class="empty"><div class="big">Where is it?</div><p>Search a style code like <b>HF2881</b>, a size like <b>HF2881-303 10</b>, a product name, or a bin like <b>A-041</b>.</p><button class="cta" id="cta-scan">${CAM_SVG}Scan a barcode</button></div>`;
+    out.innerHTML = `<div class="empty"><div class="big">Where is it?</div><p>Search a style code like <b>HF2881</b>, a size like <b>HF2881-303 10</b>, a product name, a bin like <b>A-041</b>, or a brand and sizes like <b>Nike - 7, 8</b> or <b>New Era - M</b>.</p><button class="cta" id="cta-scan">${CAM_SVG}Scan a barcode</button></div>`;
+    return;
+  }
+  if (r.mode === 'flat') {
+    const who = r.brands.length ? r.brands.join(', ') : `“${esc(r.left)}”`;
+    if (r.needSizes) {
+      meta.innerHTML = `<span class="mode">Brand · size</span> · add sizes after the dash`;
+      out.innerHTML = `<div class="empty"><div class="big">${who} — which sizes?</div><p>Finish with the sizes you want, separated by commas: <b>${esc(r.left)} - 7, 8</b> or <b>${esc(r.left)} - M</b>.</p></div>`;
+      return;
+    }
+    meta.innerHTML = `<span class="mode">Brand · size</span> · <b>${who}</b> · ${esc(r.sizes.join(', '))} · <b>${r.rows.length}</b> SKUs`;
+    if (!r.rows.length) { out.innerHTML = `<div class="empty"><div class="big">Nothing in ${esc(r.sizes.join(' / '))} for ${who}</div><p>${r.brands.length ? 'No SKUs of that brand in those sizes have stock available.' : `No brand called “${esc(r.left)}” — check the spelling, or it's matching product names instead.`}</p></div>`; return; }
+    out.innerHTML = flatCard(r) + (r.rows.length > LIMIT ? `<button class="more" id="more" data-step="60">Show ${Math.min(60, r.rows.length - LIMIT)} more of ${r.rows.length}</button>` : '');
     return;
   }
   if (r.mode === 'bin') {
@@ -483,25 +541,42 @@ input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefau
 $('clr').addEventListener('click', () => { input.value = ''; LIMIT = 20; render(); input.focus(); });
 $('results').addEventListener('click', e => {
   const b = e.target.closest('.bin'); if (b) { input.value = b.dataset.bin; LIMIT = 20; render(); scrollTo({ top: 0, behavior: 'smooth' }); return; }
-  if (e.target.id === 'more') { LIMIT += 20; render(); return; }
+  if (e.target.id === 'more') { LIMIT += Number(e.target.dataset.step || 20); render(); return; }
   if (e.target.closest('#cta-scan')) openScanner();
 });
 addEventListener('keydown', e => { if (e.key === '/' && $('lock').hidden && document.activeElement !== input && $('scan').hidden) { e.preventDefault(); input.focus(); input.select(); } });
 
-/* ---------- seed loading + live refresh ---------- */
-let booted = false;
-function loadSeed() {
-  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'stock-seed.js?v=' + Date.now(); s.onload = res; s.onerror = () => rej(new Error('seed')); document.head.appendChild(s); });
+/* ---------- seed loading + live refresh ----------
+   stock-seed.json (~1 MB raw, ~160 KB gzipped) is fetched the moment the page opens — while the
+   code is still being typed — and cached in localStorage. Repeat opens render from the cache
+   instantly, then stock-meta.json (150 bytes, never cached) says whether a newer seed exists;
+   only then is the seed re-fetched, keyed by its asOf so the browser cache can hold it. */
+const CACHE_KEY = 'sf_seed';
+let booted = false, inflight = null;
+function applySeed(seed) { window.STOCK_SEED = seed; buildIndex(); render(); }
+function readCache() { try { const t = localStorage.getItem(CACHE_KEY); return t ? JSON.parse(t) : null; } catch (e) { return null; } }
+function writeCache(text) { try { localStorage.setItem(CACHE_KEY, text); } catch (e) { /* quota — fine, we just refetch next time */ } }
+async function fetchJSON(url, opts) { const r = await fetch(url, opts); if (!r.ok) throw new Error(url + ' ' + r.status); return r; }
+function refresh() {
+  if (inflight) return inflight;
+  inflight = (async () => {
+    const m = await (await fetchJSON('stock-meta.json?v=' + Date.now(), { cache: 'no-store' })).json();
+    if (S && m.asOf === S.asOf) return false;
+    const r = await fetchJSON('stock-seed.json?v=' + encodeURIComponent(m.asOf));
+    const text = await r.text(), seed = JSON.parse(text);
+    writeCache(text); applySeed(seed); return true;
+  })().finally(() => { inflight = null; });
+  return inflight;
 }
 async function boot() {
   if (booted) return; booted = true;
-  try { if (!window.STOCK_SEED) await loadSeed(); buildIndex(); render(); }
-  catch (e) { $('pill').className = 'live-pill off'; $('pill-t').textContent = 'Offline'; $('results').innerHTML = `<div class="empty"><div class="big">Couldn't load stock data</div><p>Check the connection and pull to refresh.</p></div>`; }
-  setInterval(async () => {
-    try { const m = await (await fetch('stock-meta.json?v=' + Date.now(), { cache: 'no-store' })).json();
-      if (m.asOf && S && m.asOf !== S.asOf) { await loadSeed(); buildIndex(); render(); } } catch (e) {}
-  }, 60000);
+  if (!S) { const c = window.STOCK_SEED || readCache(); if (c) applySeed(c); }
+  try { await refresh(); }
+  catch (e) { if (!S) { $('pill').className = 'live-pill off'; $('pill-t').textContent = 'Offline'; $('results').innerHTML = `<div class="empty"><div class="big">Couldn't load stock data</div><p>Check the connection, then pull down to refresh.</p></div>`; } }
+  setInterval(() => refresh().catch(() => {}), 60000);
 }
+// start the download immediately — before the code is entered — unless data was inlined
+if (!window.STOCK_SEED) refresh().catch(() => {});
 
 /* ---------- camera barcode scanner ----------
    One code path, the BarcodeDetector API. iPhone/iPad Safari has NO native BarcodeDetector

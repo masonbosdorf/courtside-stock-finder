@@ -2,15 +2,15 @@
    Two paginated SuiteQL pulls:
      A. Loc-2 warehouse bins with stock (active bins only), per SKU per bin, AVAILABLE qty
      B. Loc-22 sales floor (non-bin) AVAILABLE qty per SKU
-   Merged by SKU and written to stock-seed.js (window.STOCK_SEED) + stock-meta.json (asOf only,
+   Merged by SKU and written to stock-seed.json + stock-meta.json (asOf only,
    what the browser polls). Non-fatal by design: on any fetch error, or an implausibly small
    result, it exits non-zero WITHOUT writing so a NetSuite hiccup never clobbers a good seed.
-   Usage: node stock-fetch.js [stock-seed.js path] */
+   Usage: node stock-fetch.js [stock-seed.json path] */
 const fs   = require('fs');
 const path = require('path');
 const { suiteqlAll } = require('./netsuite');
 
-const SEED_PATH = path.resolve(process.argv[2] || 'stock-seed.js');
+const SEED_PATH = path.resolve(process.argv[2] || 'stock-seed.json');
 const META_PATH = path.join(path.dirname(SEED_PATH), 'stock-meta.json');
 const TZ = 'Australia/Melbourne';
 
@@ -72,9 +72,8 @@ async function main() {
   const binRows = items.reduce((a, it) => a + it[6].length, 0);
   const seed = { asOf: melbourneNow(), counts: { skus: items.length, binRows, units, floorSkus: floor.length }, items };
 
-  const header = '/* stock-seed.js — DATA ONLY. Refreshed by GitHub Actions (cloud sync) from NetSuite.\n' +
-                 '   items: [sku, name, brand, barcode, parent, floorAvail, [[bin, avail], ...]] */\n';
-  fs.writeFileSync(SEED_PATH, header + 'window.STOCK_SEED = ' + JSON.stringify(seed) + ';\n');
+  // plain JSON (not a JS file) so the browser can fetch + cache it and store it locally
+  fs.writeFileSync(SEED_PATH, JSON.stringify(seed) + '\n');
   fs.writeFileSync(META_PATH, JSON.stringify({ asOf: seed.asOf, ...seed.counts }) + '\n');
   console.log(`stock-fetch OK: ${items.length} SKUs, ${binRows} bin rows, ${units} units avail in bins, ${floor.length} floor SKUs · ${((Date.now() - t0) / 1000).toFixed(1)}s · ${(fs.statSync(SEED_PATH).size / 1024).toFixed(0)} KB`);
 }

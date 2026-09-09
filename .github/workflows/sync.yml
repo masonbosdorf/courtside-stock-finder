@@ -25,20 +25,20 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Stock fetch (NetSuite bins + floor → stock-seed.js)
+      - name: Stock fetch (NetSuite bins + floor → stock-seed.json)
         env:
           FS_ACCOUNT:         ${{ secrets.FS_ACCOUNT }}
           FS_CONSUMER_KEY:    ${{ secrets.FS_CONSUMER_KEY }}
           FS_CONSUMER_SECRET: ${{ secrets.FS_CONSUMER_SECRET }}
           FS_TOKEN_ID:        ${{ secrets.FS_TOKEN_ID }}
           FS_TOKEN_SECRET:    ${{ secrets.FS_TOKEN_SECRET }}
-        run: node stock-fetch.js "$GITHUB_WORKSPACE/stock-seed.js"
+        run: node stock-fetch.js "$GITHUB_WORKSPACE/stock-seed.json"
 
       - name: Commit & push if the data changed
         run: |
           git config user.name  "stock-bot"
           git config user.email "stock-bot@users.noreply.github.com"
-          git add stock-seed.js stock-meta.json
+          git add stock-seed.json stock-meta.json
           if git diff --cached --quiet; then
             echo "no data change"
           else
