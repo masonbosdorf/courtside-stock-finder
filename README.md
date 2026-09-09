@@ -1,8 +1,8 @@
 # CourtSide Stock Finder
 
 Read-only lookup for retail staff: search any SKU (or scan its barcode) and see which
-Loc-2 warehouse bins hold it, how many are **available** per bin, and how many are on the
-sales floor. No NetSuite login needed. Data refreshes every ~5 minutes.
+Loc-2 warehouse bins hold it, how many are **available** per bin, how many are on the
+sales floor, and what it rings up at on Shopify POS (with sale price and % off when discounted). No NetSuite login needed. Data refreshes every ~5 minutes.
 
 Live: https://masonbosdorf.github.io/courtside-stock-finder/ — six-digit access code on open.
 
@@ -22,7 +22,8 @@ the tiny stock-meta.json every 60s, and re-fetches the seed only when asOf chang
 |---|---|
 | `index.html` | the whole app — lock screen, search, camera scanner, bin view |
 | `stock-seed.json` / `stock-meta.json` | DATA ONLY, written by the bot; the page caches the seed on-device and only refetches when meta says asOf changed |
-| `stock-fetch.js` | NetSuite → seed (bins at loc 2, floor at loc 22) |
+| `stock-fetch.js` | NetSuite → seed (bins at loc 2, floor at loc 22) + Shopify POS prices merged per SKU |
+| `shopify.js` / `shopify-prices.js` | Shopify Admin API (client credentials, shared with the siblings) and the variant price pull: price = what POS rings up, compareAt > price = on sale. Only ACTIVE products; anything else shows "not on POS". Falls back to the previous seed's prices if Shopify is down |
 | `netsuite.js` / `creds.js` | shared with the sibling repos, plus `suiteqlAll()` offset paging |
 | `img/<style>.webp` | 192px product thumbnails, one per style-colour, cut from the Assets bank by `tools/build_thumbs.py` (filename = parent with anything outside `[A-Za-z0-9._-]` → `_`). Lazy-loaded per card; a missing file just shows a placeholder |
 | `tools/build_thumbs.py` | hero picker + thumbnail cutter (Nike view-code priority PHSLH000 → … , other brands first file / `Hero/` folder). Rerun after new imagery lands: `python3 tools/build_thumbs.py --all` then commit `img/` |

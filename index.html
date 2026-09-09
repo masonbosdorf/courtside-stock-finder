@@ -138,6 +138,17 @@ html[data-device="tablet"]{--th:64px;} html[data-device="desktop"]{--th:64px;}
 .th.sm{--th:38px;border-radius:8px;}
 td.prod{display:flex;align-items:center;gap:10px;}
 td.prod .pt{min-width:0;}
+.price{margin-top:8px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-variant-numeric:tabular-nums;}
+.price .now{font-family:"Archivo Black",sans-serif;font-size:clamp(16px,4vw,20px);letter-spacing:-0.02em;color:var(--signal);}
+.price.sale .now{color:var(--gold);}
+.price s{color:var(--faint);font-weight:600;font-size:13px;}
+.price .off{font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--gold);border:1px solid rgba(255,214,107,0.45);border-radius:6px;padding:2px 6px;}
+.price .np{font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--ghost);}
+.price .mixed{font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--faint);font-weight:700;}
+td.rp{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:700;width:1%;}
+td.rp.sale{color:var(--gold);} td.rp s{color:var(--faint);font-weight:500;font-size:12px;margin-left:5px;} td.rp .off{color:var(--gold);font-size:10px;margin-left:5px;letter-spacing:0.08em;}
+td.rp.np{color:var(--ghost);font-weight:600;font-size:12px;}
+.sk .pr{color:var(--muted);font-weight:700;} .sk .pr.sale{color:var(--gold);} .sk .pr s{color:var(--faint);font-weight:500;} .sk .pr .off{color:var(--gold);}
 /* bin-mode card: one bin, many products */
 .card.binview .card-h h2{font-family:"Archivo Black",sans-serif;font-size:clamp(24px,6vw,34px);letter-spacing:-0.02em;}
 td.prod{min-width:0;}
@@ -387,13 +398,17 @@ function buildIndex() {
     if (!byParent.has(parent)) byParent.set(parent, { parent, name, brand, sizes: [], wh: 0, floor: 0 });
     const p = byParent.get(parent);
     const wh = bins.reduce((a, b) => a + b[1], 0);
-    p.sizes.push({ sku, size: sizeOf(sku, parent), bc, floor, bins, wh });
+    p.sizes.push({ sku, size: sizeOf(sku, parent), bc, floor, bins, wh, price: it[7] ?? null, cmp: it[8] || 0 });
     p.wh += wh; p.floor += floor;
     if (bc) BY_BC.set(String(bc), it);
     BY_SKU.set(sku.toUpperCase(), it);
   }
   for (const p of byParent.values()) {
     p.sizes.sort((a, b) => cmpSize(a.size, b.size));
+    // one price for the style when every priced size agrees, else a range + per-row prices
+    const pr = [...new Set(p.sizes.filter(s => s.price != null).map(s => s.price + '|' + s.cmp))];
+    p.pricing = !pr.length ? { none: true } : pr.length === 1 ? { price: p.sizes.find(s => s.price != null).price, cmp: p.sizes.find(s => s.price != null).cmp }
+              : { mixed: true, min: Math.min(...p.sizes.filter(s => s.price != null).map(s => s.price)), max: Math.max(...p.sizes.filter(s => s.price != null).map(s => s.price)) };
     // word index: name words (what people type for a model) vs everything incl. codes/barcodes/bins
     p.nw = WORDS(p.name + ' ' + p.brand + ' ' + p.parent);
     p.aw = p.nw.concat(WORDS(p.sizes.map(s => s.sku + ' ' + s.bc + ' ' + s.bins.map(b => b[0]).join(' ')).join(' ')));
@@ -477,6 +492,16 @@ function search(q) {
   return { mode: 'search', styles: matchStyles(raw) };
 }
 
+/* prices: what Shopify POS rings up; cmp > 0 = on sale (cmp is the full price) */
+const money = n => '$' + Number(n).toFixed(2).replace(/\.00$/, '');
+const pct = (price, cmp) => Math.round((1 - price / cmp) * 100);
+function priceHTML(pr) {
+  if (!pr || pr.none) return `<div class="price"><span class="np">Not on POS</span></div>`;
+  if (pr.mixed) return `<div class="price"><span class="now">${money(pr.min)} – ${money(pr.max)}</span><span class="mixed">varies by size</span></div>`;
+  if (pr.cmp) return `<div class="price sale"><span class="now">${money(pr.price)}</span><s>${money(pr.cmp)}</s><span class="off">${pct(pr.price, pr.cmp)}% off</span></div>`;
+  return `<div class="price"><span class="now">${money(pr.price)}</span></div>`;
+}
+const rowPrice = (price, cmp) => price == null ? `<span class="pr np">not on POS</span>` : cmp ? `<span class="pr sale">${money(price)} <s>${money(cmp)}</s> <span class="off">−${pct(price, cmp)}%</span></span>` : `<span class="pr">${money(price)}</span>`;
 /* thumbnails: img/<parent with anything outside [A-Za-z0-9._-] → "_">.webp, lazy, placeholder on 404 */
 const thumbSrc = parent => 'img/' + String(parent).replace(/[^A-Za-z0-9._-]/g, '_') + '.webp';
 const thumb = (parent, sm) => `<span class="th${sm ? ' sm' : ''}"><img src="${thumbSrc(parent)}" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('none')"></span>`;
@@ -487,20 +512,23 @@ function binChip(bin, av) { return `<button class="bin" data-bin="${esc(bin)}" t
 function styleCard(p, hit) {
   const rows = p.sizes.map(s => {
     const bins = s.bins.length ? `<div class="stack">${s.bins.map(b => binChip(b[0], b[1])).join('')}</div>` : `<span class="none">—</span>`;
-    return `<tr class="${hit && s.sku === hit ? 'hl' : ''}"><td class="size">${esc(s.size)}</td><td class="bins">${bins}</td><td class="n qty ${s.wh ? 'ok' : 'zero'}">${s.wh || '—'}</td><td class="n floor ${s.floor ? '' : 'zero'}">${s.floor || '—'}</td></tr>`;
+    const rp = p.pricing.mixed ? `<td class="n rp ${s.price == null ? 'np' : s.cmp ? 'sale' : ''}">${s.price == null ? '—' : money(s.price)}${s.cmp ? `<s>${money(s.cmp)}</s><span class="off">−${pct(s.price, s.cmp)}%</span>` : ''}</td>` : '';
+    return `<tr class="${hit && s.sku === hit ? 'hl' : ''}"><td class="size">${esc(s.size)}</td><td class="bins">${bins}</td>${rp}<td class="n qty ${s.wh ? 'ok' : 'zero'}">${s.wh || '—'}</td><td class="n floor ${s.floor ? '' : 'zero'}">${s.floor || '—'}</td></tr>`;
   }).join('');
+  const rph = p.pricing.mixed ? '<th class="n">Price</th>' : '';
   return `<section class="card${hit ? ' hit' : ''}">
     <div class="card-h">${thumb(p.parent)}<div class="who">
       <div class="eyebrow"><span>${esc(p.brand || '—')}</span><span class="code">${esc(p.parent)}</span></div>
       <h2>${esc(nice(p.name) || p.parent)}</h2>
+      ${priceHTML(p.pricing)}
     </div>
     <div class="tot"><div class="${p.wh ? '' : 'zero'}"><div class="v">${p.wh}</div><div class="l">Warehouse</div></div><div class="${p.floor ? '' : 'zero'}"><div class="v">${p.floor}</div><div class="l">Floor</div></div></div></div>
-    <div style="overflow-x:auto"><table><thead><tr><th>Size</th><th>Bin · avail</th><th class="n">Warehouse</th><th class="n">Floor</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Size</th><th>Bin · avail</th>${rph}<th class="n">Warehouse</th><th class="n">Floor</th></tr></thead><tbody>${rows}</tbody></table></div>
   </section>`;
 }
 function binCard(b) {
   const rows = b.rows.sort((x, y) => x.p.name.localeCompare(y.p.name) || cmpSize(x.s.size, y.s.size)).map(({ p, s, av }) =>
-    `<tr><td class="prod">${thumb(p.parent, true)}<div class="pt"><div class="nm">${esc(nice(p.name) || p.parent)}</div><div class="sk">${esc(p.brand || '—')} · ${esc(s.sku)}</div></div></td><td class="size">${esc(s.size)}</td><td class="n qty ok">${av}</td></tr>`).join('');
+    `<tr><td class="prod">${thumb(p.parent, true)}<div class="pt"><div class="nm">${esc(nice(p.name) || p.parent)}</div><div class="sk">${esc(p.brand || '—')} · ${esc(s.sku)} · ${rowPrice(s.price, s.cmp)}</div></div></td><td class="size">${esc(s.size)}</td><td class="n qty ok">${av}</td></tr>`).join('');
   return `<section class="card binview">
     <div class="card-h"><div class="who"><div class="eyebrow"><span>Bin</span><span class="code">${b.rows.length} SKU${b.rows.length === 1 ? '' : 's'}</span></div><h2>${esc(b.bin)}</h2></div>
     <div class="tot"><div><div class="v">${b.units}</div><div class="l">Units avail</div></div></div></div>
@@ -513,7 +541,7 @@ function flatCard(r) {
   const rows = r.rows.slice(0, LIMIT).map(it => {
     const [sku, name, brand, bc, parent, floor, bins] = it, w = bins.reduce((a, b) => a + b[1], 0);
     const chips = bins.length ? `<div class="stack">${bins.map(b => binChip(b[0], b[1])).join('')}</div>` : `<span class="none">—</span>`;
-    return `<tr><td class="prod">${thumb(parent, true)}<div class="pt"><div class="nm">${esc(nice(name) || parent)}</div><div class="sk">${esc(sku)}${r.brands.length > 1 ? ' · ' + esc(brand) : ''}</div></div></td><td class="size">${esc(sizeOf(sku, parent))}</td><td class="bins">${chips}</td><td class="n qty whcol ${w ? 'ok' : 'zero'}">${w || '—'}</td><td class="n floor ${floor ? '' : 'zero'}">${floor || '—'}</td></tr>`;
+    return `<tr><td class="prod">${thumb(parent, true)}<div class="pt"><div class="nm">${esc(nice(name) || parent)}</div><div class="sk">${esc(sku)}${r.brands.length > 1 ? ' · ' + esc(brand) : ''} · ${rowPrice(it[7] ?? null, it[8] || 0)}</div></div></td><td class="size">${esc(sizeOf(sku, parent))}</td><td class="bins">${chips}</td><td class="n qty whcol ${w ? 'ok' : 'zero'}">${w || '—'}</td><td class="n floor ${floor ? '' : 'zero'}">${floor || '—'}</td></tr>`;
   }).join('');
   return `<section class="card flat">
     <div class="card-h"><div class="who"><div class="eyebrow"><span>${esc(label)}</span><span class="code">${r.rows.length} SKU${r.rows.length === 1 ? '' : 's'}</span></div><h2>Size ${esc(r.sizes.join(' / '))}</h2></div>

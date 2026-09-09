@@ -30,8 +30,11 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Stock fetch (NetSuite bins + floor → stock-seed.json)
+      - name: Stock fetch (NetSuite bins + floor + Shopify POS prices → stock-seed.json)
         env:
+          FS_SHOPIFY_DOMAIN:        ${{ secrets.FS_SHOPIFY_DOMAIN }}
+          FS_SHOPIFY_CLIENT_ID:     ${{ secrets.FS_SHOPIFY_CLIENT_ID }}
+          FS_SHOPIFY_CLIENT_SECRET: ${{ secrets.FS_SHOPIFY_CLIENT_SECRET }}
           FS_ACCOUNT:         ${{ secrets.FS_ACCOUNT }}
           FS_CONSUMER_KEY:    ${{ secrets.FS_CONSUMER_KEY }}
           FS_CONSUMER_SECRET: ${{ secrets.FS_CONSUMER_SECRET }}

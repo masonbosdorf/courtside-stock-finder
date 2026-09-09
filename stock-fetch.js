@@ -2,13 +2,15 @@
    Two paginated SuiteQL pulls:
      A. Loc-2 warehouse bins with stock (active bins only), per SKU per bin, AVAILABLE qty
      B. Loc-22 sales floor (non-bin) AVAILABLE qty per SKU
-   Merged by SKU and written to stock-seed.json + stock-meta.json (asOf only,
-   what the browser polls). Non-fatal by design: on any fetch error, or an implausibly small
+   Plus the Shopify POS price per SKU (shopify-prices.js): price + compare-at (full price when on
+   sale). If Shopify fails, prices are carried over from the previous seed so a hiccup never blanks
+   them. Merged by SKU and written to stock-seed.json + stock-meta.json (asOf only, what the browser polls). Non-fatal by design: on any fetch error, or an implausibly small
    result, it exits non-zero WITHOUT writing so a NetSuite hiccup never clobbers a good seed.
    Usage: node stock-fetch.js [stock-seed.json path] */
 const fs   = require('fs');
 const path = require('path');
 const { suiteqlAll } = require('./netsuite');
+const { fetchPrices } = require('./shopify-prices');
 
 const SEED_PATH = path.resolve(process.argv[2] || 'stock-seed.json');
 const META_PATH = path.join(path.dirname(SEED_PATH), 'stock-meta.json');
@@ -56,11 +58,22 @@ async function main() {
   if (bins.length < MIN_BIN_ROWS)   throw new Error(`only ${bins.length} bin rows — looks partial, not writing`);
   if (floor.length < MIN_FLOOR_ROWS) throw new Error(`only ${floor.length} floor rows — looks partial, not writing`);
 
-  // item record: [sku, name, brand, barcode, parent(style-colour), floorAvail, [[bin, avail], ...]]
+  // Shopify POS prices — non-fatal: fall back to the previous seed's prices
+  let prices = null, priceNote = '';
+  try { prices = await fetchPrices(); priceNote = `${prices.size} priced (${[...prices.values()].filter(v => v.c).length} on sale)`; }
+  catch (e) {
+    console.error('shopify prices FAILED (carrying over previous): ' + e.message);
+    prices = new Map();
+    try { for (const it of JSON.parse(fs.readFileSync(SEED_PATH, 'utf8')).items) if (it[7] != null) prices.set(it[0], { p: it[7], c: it[8] || 0 }); } catch (e2) {}
+    priceNote = `${prices.size} carried over`;
+  }
+
+  // item record: [sku, name, brand, barcode, parent(style-colour), floorAvail, [[bin, avail], ...], price|null, compareAt|0]
+  // price = what Shopify POS rings up (ACTIVE products only); compareAt > 0 = on sale, compareAt is the full price
   const by = new Map();
   const rec = r => {
     const sku = String(r.sku || '').trim(); if (!sku) return null;
-    if (!by.has(sku)) by.set(sku, [sku, r.name || '', r.brand || '', r.barcode || '', r.parent || sku, 0, []]);
+    if (!by.has(sku)) { const pr = prices.get(sku); by.set(sku, [sku, r.name || '', r.brand || '', r.barcode || '', r.parent || sku, 0, [], pr ? pr.p : null, pr ? pr.c : 0]); }
     return by.get(sku);
   };
   for (const r of bins)  { const it = rec(r); if (!it) continue; const a = Number(r.avail) || 0; if (a > 0) it[6].push([r.bin, a]); }
@@ -70,11 +83,12 @@ async function main() {
 
   const units = items.reduce((a, it) => a + it[6].reduce((x, b) => x + b[1], 0), 0);
   const binRows = items.reduce((a, it) => a + it[6].length, 0);
-  const seed = { asOf: melbourneNow(), counts: { skus: items.length, binRows, units, floorSkus: floor.length }, items };
+  const priced = items.filter(it => it[7] != null).length, onSale = items.filter(it => it[8]).length;
+  const seed = { asOf: melbourneNow(), counts: { skus: items.length, binRows, units, floorSkus: floor.length, priced, onSale }, items };
 
   // plain JSON (not a JS file) so the browser can fetch + cache it and store it locally
   fs.writeFileSync(SEED_PATH, JSON.stringify(seed) + '\n');
   fs.writeFileSync(META_PATH, JSON.stringify({ asOf: seed.asOf, ...seed.counts }) + '\n');
-  console.log(`stock-fetch OK: ${items.length} SKUs, ${binRows} bin rows, ${units} units avail in bins, ${floor.length} floor SKUs · ${((Date.now() - t0) / 1000).toFixed(1)}s · ${(fs.statSync(SEED_PATH).size / 1024).toFixed(0)} KB`);
+  console.log(`stock-fetch OK: ${items.length} SKUs, ${binRows} bin rows, ${units} units avail in bins, ${floor.length} floor SKUs · prices: ${priceNote}, ${priced} in-stock SKUs priced, ${onSale} on sale · ${((Date.now() - t0) / 1000).toFixed(1)}s · ${(fs.statSync(SEED_PATH).size / 1024).toFixed(0)} KB`);
 }
 main().catch(e => { console.error('stock-fetch FAILED: ' + e.message); process.exit(1); });
