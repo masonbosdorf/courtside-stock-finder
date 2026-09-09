@@ -7,6 +7,11 @@ name: stock-sync
 
 on:
   workflow_dispatch: {}        # fired by cron-job.org + the manual "Run workflow" button
+  # STOPGAP until the cron-job.org job exists: GitHub's own schedule. It is best-effort (often
+  # 5–20 min late at busy times) and MUST be removed once cron-job.org is firing, or the two
+  # will double-fire and race on the push like they did on the sibling repos.
+  schedule:
+    - cron: '*/5 * * * *'
 
 permissions:
   contents: write              # allow committing the refreshed seed back
