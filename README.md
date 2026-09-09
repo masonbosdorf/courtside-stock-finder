@@ -23,7 +23,7 @@ the tiny stock-meta.json every 60s, and re-fetches the seed only when asOf chang
 | `index.html` | the whole app — lock screen, search, camera scanner, bin view |
 | `stock-seed.json` / `stock-meta.json` | DATA ONLY, written by the bot; the page caches the seed on-device and only refetches when meta says asOf changed |
 | `stock-fetch.js` | NetSuite → seed (bins at loc 2, floor at loc 22) + Shopify POS prices merged per SKU |
-| `shopify.js` / `shopify-prices.js` | Shopify Admin API (client credentials, shared with the siblings) and the variant price pull: price = what POS rings up, compareAt > price = on sale. Only ACTIVE products; anything else shows "not on POS". Falls back to the previous seed's prices if Shopify is down |
+| `shopify.js` / `shopify-prices.js` | Shopify Admin API (client credentials, shared with the siblings) and the variant pull — price, plus productType and audience/category tags for the kind filters: price = what POS rings up, compareAt > price = on sale. Only ACTIVE products; anything else shows "not on POS". Falls back to the previous seed's prices if Shopify is down |
 | `netsuite.js` / `creds.js` | shared with the sibling repos, plus `suiteqlAll()` offset paging |
 | `img/<style>.webp` | 192px product thumbnails, one per style-colour, cut from the Assets bank by `tools/build_thumbs.py` (filename = parent with anything outside `[A-Za-z0-9._-]` → `_`). Lazy-loaded per card; a missing file just shows a placeholder |
 | `tools/build_thumbs.py` | hero picker + thumbnail cutter (Nike view-code priority PHSLH000 → … , other brands first file / `Hero/` folder). Rerun after new imagery lands: `python3 tools/build_thumbs.py --all` then commit `img/` |
@@ -53,3 +53,5 @@ node stock-fetch.js            # uses ~/.config/fulfilment-sync/credentials.json
 | `A-041` / `A-041-03-011` | bin view — everything in that bin (or all bins under a prefix) |
 | `Nike - 7, 8` / `New Era - M` / `mitchell - L` / `Li-Ning - 9` | one flat SKU-ordered list of that brand in ONLY those sizes. The separator is a dash with a space on at least one side, so hyphenated brands and style codes never split; brand matches by prefix; `&`/`and` are interchangeable. |
 | `sabrina 3 - 10` | same flat list, but the left side is a normal search instead of a brand |
+| `Nike - socks` / `Jordan - hat or cap` / `Adidas - backpack` | style cards of that brand filtered to a KIND of item. Kinds map plain words to Shopify product types (hat → Cap, Bucket Hat, Beanie; socks → all sock types; bag → all bag types; shoes → Low/Mid/High Cut …) and audience tags (mens, womens, kids). Words with no synonym prefix-match the product type, then the name. `,` or `or` = either; several words = all of them |
+| `Adidas - womens shorts M` | kinds and sizes together: flat list of that brand's womens shorts in M |

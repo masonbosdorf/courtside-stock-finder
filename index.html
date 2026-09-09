@@ -310,7 +310,7 @@ function device() {
 }
 function applyDevice() {
   const d = device(); document.documentElement.dataset.device = d;
-  $('hint').innerHTML = d === 'desktop' ? 'Press <kbd>/</kbd> to search · <b>brand - sizes</b> lists one size across a brand · tap a bin to see what else is in it'
+  $('hint').innerHTML = d === 'desktop' ? 'Press <kbd>/</kbd> to search · <b>brand - sizes</b> or <b>brand - socks</b> filters a brand · tap a bin to see what else is in it'
                        : 'Tap a bin to see what else is in it';
 }
 applyDevice(); addEventListener('resize', applyDevice);
@@ -399,6 +399,8 @@ function buildIndex() {
     const p = byParent.get(parent);
     const wh = bins.reduce((a, b) => a + b[1], 0);
     p.sizes.push({ sku, size: sizeOf(sku, parent), bc, floor, bins, wh, price: it[7] ?? null, cmp: it[8] || 0 });
+    if (!p.type && it[9]) p.type = it[9];
+    if (!p.tags && it[10]) p.tags = it[10];
     p.wh += wh; p.floor += floor;
     if (bc) BY_BC.set(String(bc), it);
     BY_SKU.set(sku.toUpperCase(), it);
@@ -411,6 +413,7 @@ function buildIndex() {
               : { mixed: true, min: Math.min(...p.sizes.filter(s => s.price != null).map(s => s.price)), max: Math.max(...p.sizes.filter(s => s.price != null).map(s => s.price)) };
     // word index: name words (what people type for a model) vs everything incl. codes/barcodes/bins
     p.nw = WORDS(p.name + ' ' + p.brand + ' ' + p.parent);
+    p.kw = WORDS((p.type || '') + ' ' + (p.tags || ''));   // kind words: Shopify product type + audience/category tags
     p.aw = p.nw.concat(WORDS(p.sizes.map(s => s.sku + ' ' + s.bc + ' ' + s.bins.map(b => b[0]).join(' ')).join(' ')));
   }
   STYLES = [...byParent.values()];
@@ -441,17 +444,54 @@ function normSize(s) { s = String(s).toUpperCase().replace(/\s+/g, ''); s = SZ_A
 const sizeEq = (a, b) => normSize(a) === normSize(b);
 /* brand names compared loosely: case, "&" vs "and", spaces and punctuation ignored → "mitchell and ness" == "MITCHELL & NESS" */
 const normBrand = s => String(s).toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, '');
+/* KINDS — the right side of the dash can name a kind of item ("Nike - socks", "Jordan - hat or cap",
+   "Adidas - womens shorts M"). Each plain-English word maps to Shopify product types or tags; a word with
+   no synonym is prefix-matched against the product-type words, then the product name. */
+const KIND = {
+  hat: ['Cap', 'Bucket Hat', 'Beanie'], hats: 'hat', cap: ['Cap'], caps: 'cap', snapback: 'cap', trucker: 'cap', fitted: 'cap', headwear: 'hat', beanie: ['Beanie'], beanies: 'beanie', bucket: ['Bucket Hat'],
+  sock: ['Crew Sock', 'Quarter Sock', 'Ankle Sock', 'No-Show Sock'], socks: 'sock', crew: ['Crew Sock', 'Long sleeve Crew', '1/4 Zip Crew'],
+  bag: ['Backpack', 'Duffle Bag', 'Crossbody Bag', 'Basketball Bag', 'Shoe Bag', 'Shoe Box Bag', 'Waistpack'], bags: 'bag', backpack: ['Backpack'], backpacks: 'backpack', duffle: ['Duffle Bag'], duffel: 'duffle', crossbody: ['Crossbody Bag'], waistpack: ['Waistpack'], bumbag: 'waistpack',
+  shoe: ['Low Cut', 'Mid Cut', 'High Cut'], shoes: 'shoe', sneaker: 'shoe', sneakers: 'shoe', kicks: 'shoe', footwear: ['#FOOTWEAR'], low: ['Low Cut'], mid: ['Mid Cut'], high: ['High Cut'],
+  slide: ['Sandal / Slide'], slides: 'slide', sandal: 'slide', sandals: 'slide', thongs: 'slide', mule: ['Mule'], mules: 'mule',
+  tee: ['Short Sleeve Tee', 'Long Sleeve Tee', 'Sleeveless Tee'], tees: 'tee', tshirt: 'tee', shirt: ['Short Sleeve Tee', 'Long Sleeve Tee', 'Short Sleeve Shirt', 'Long Sleeve Shirt'], shirts: 'shirt', top: ['Short Sleeve Tee', 'Long Sleeve Tee', 'Sleeveless Tee', 'Short Sleeve Top', 'Long Sleeve Top', 'Sleeveless Top', 'Tank / Singlet'], tops: 'top',
+  tank: ['Tank / Singlet', 'Sleeveless Tee', 'Sleeveless Top'], singlet: 'tank', singlets: 'tank', sleeveless: 'tank',
+  hoodie: ['Pullover Hoodie', 'Full Zip Hoodie'], hoodies: 'hoodie', hood: 'hoodie', hoody: 'hoodie', jumper: ['Pullover Hoodie', 'Full Zip Hoodie', 'Long sleeve Crew', '1/4 Zip Crew'], jumpers: 'jumper', sweater: 'jumper', sweatshirt: 'jumper', fleece: 'jumper', pullover: ['Pullover Hoodie'], zip: ['Full Zip Hoodie', '1/4 Zip Crew'],
+  jacket: ['Jacket', 'Anorak Jacket'], jackets: 'jacket', anorak: ['Anorak Jacket'], vest: ['Vest'], vests: 'vest',
+  short: ['Short'], shorts: 'short', pant: ['Pant'], pants: 'pant', trackpants: 'pant', trousers: 'pant', tight: ['Tight'], tights: 'tight', leggings: 'tight',
+  jersey: ['Jersey', 'Short Sleeve Jersey', 'Long Sleeve Jersey'], jerseys: 'jersey', polo: ['Short Sleeve Polo', 'long sleeve polo'], polos: 'polo', bra: ['Bra'], bras: 'bra', dress: ['Dress'], skirt: ['Skirt', 'Skort'],
+  ball: ['Basketball', 'High Bounce Ball'], balls: 'ball', basketball: ['Basketball'], basketballs: 'basketball',
+  bottle: ['Bottle', 'Cup', 'Bottle lid', 'Bottle/Cup Misc'], bottles: 'bottle', drink: 'bottle', cup: ['Cup'], cups: 'cup',
+  accessories: ['#ACCESSORIES'], accessory: 'accessories', apparel: ['#APPAREL'], clothing: 'apparel', clothes: 'apparel',
+  mens: ['#Mens'], men: 'mens', womens: ['#Womens'], women: 'womens', ladies: 'womens', unisex: ['#Unisex'], kids: ['#Kids', '#Youth', '#Boys', '#Girls', '#Toddler'], kid: 'kids', youth: 'kids', junior: 'kids', juniors: 'kids', boys: 'kids', girls: 'kids', toddler: ['#Toddler'],
+};
+const kindTargets = w => { let v = KIND[w]; while (typeof v === 'string') v = KIND[v]; return v || null; };
+const isSizeTok = t => /^[\d.]+[a-z]?$/i.test(t) || SIZE_ORDER.includes(t.toUpperCase()) || t.toUpperCase() in SZ_ALIAS || /^[xsml]{1,4}(\/[xsml]{1,4})?$/i.test(t);
+function kindMatch(p, word) {
+  const tg = kindTargets(word);
+  if (tg) return tg.some(t => t[0] === '#' ? (p.tags || '').split(' ').includes(t.slice(1)) : (p.type || '') === t);
+  return matchTok(p.kw, word) || matchTok(p.nw, word);   // unknown word: product-type words, then the name
+}
+/* parse the right side: groups split on "," / " or "; sizes go to one OR-set, other words form kind groups (AND within, OR across) */
+function parseRight(right) {
+  const sizes = new Set(), kinds = [];
+  for (const grp of right.split(/\s*,\s*|\s+or\s+/i).map(s => s.trim()).filter(Boolean)) {
+    const words = [];
+    for (const t of grp.split(/\s+/)) { if (!t) continue; if (isSizeTok(t)) sizes.add(t.toUpperCase()); else words.push(t.toLowerCase()); }
+    if (words.length) kinds.push(words);
+  }
+  return { sizes: [...sizes], kinds };
+}
 /* "<brand or words> - <size>[, <size>…]": the separator is a dash/colon with whitespace on at least one
    side, so hyphenated brands (Li-Ning) and codes (HF2881-303) never split. Brand matches by prefix. */
 const SIZED_RE = /^(.*?\S)(?:\s+[-–—:]\s*|\s*[-–—:]\s+)(.*)$/;
 function parseSized(raw) {
   const m = raw.match(SIZED_RE); if (!m) return null;
   const left = m[1].trim(), right = m[2].trim();
-  const sizes = [...new Set(right.split(/[,\s]+/).filter(Boolean).map(s => s.toUpperCase()))];
+  const { sizes, kinds } = parseRight(right);
   const nl = normBrand(left);
   let brands = nl ? BRANDS.filter(b => normBrand(b) === nl) : [];
   if (!brands.length && nl) brands = BRANDS.filter(b => normBrand(b).startsWith(nl));
-  return { left, sizes, brands };
+  return { left, sizes, kinds, brands };
 }
 /* exact SKU (what a Code 128 tag encodes), tolerant of stray spaces/case */
 function findSku(raw) { return BY_SKU.get(String(raw).trim().toUpperCase().replace(/\s+/g, '')) || null; }
@@ -463,11 +503,14 @@ function search(q) {
   // "Nike - 7,8" / "New Era - M" / "sabrina 3 - 10": one flat list, requested sizes only, SKU order
   const sz = parseSized(raw);
   if (sz) {
-    if (!sz.sizes.length) return { mode: 'flat', rows: [], ...sz, needSizes: true };
-    let pool;
-    if (sz.brands.length) pool = ITEMS.filter(it => sz.brands.includes(it[2]));
-    else { const par = new Set(matchStyles(sz.left).map(p => p.parent)); pool = ITEMS.filter(it => par.has(it[4])); }
-    const rows = pool.filter(it => sz.sizes.some(s => sizeEq(sizeOf(it[0], it[4]), s)));   // ITEMS is already in SKU order
+    if (!sz.sizes.length && !sz.kinds.length) return { mode: 'flat', rows: [], ...sz, needSizes: true };
+    let styles = sz.brands.length ? STYLES.filter(p => sz.brands.includes(p.brand)) : matchStyles(sz.left);
+    if (sz.kinds.length) styles = styles.filter(p => sz.kinds.some(g => g.every(w => kindMatch(p, w))));
+    if (!sz.sizes.length) {   // kind only → style cards, SKU order
+      return { mode: 'search', styles: styles.slice().sort((a, b) => a.parent.localeCompare(b.parent)), kind: sz };
+    }
+    const par = new Set(styles.map(p => p.parent));
+    const rows = ITEMS.filter(it => par.has(it[4]) && sz.sizes.some(s => sizeEq(sizeOf(it[0], it[4]), s)));   // ITEMS is already in SKU order
     return { mode: 'flat', rows, ...sz };
   }
   // bin mode: the query is (a prefix of) a bin code → list everything in matching bins
@@ -556,17 +599,18 @@ function render() {
   if (r.mode === 'flat' && LIMIT < 60) LIMIT = 60;
   if (r.mode === 'idle') {
     meta.textContent = 'Type or scan to search';
-    out.innerHTML = `<div class="empty"><div class="big">Where is it?</div><p>Search a style code like <b>HF2881</b>, a size like <b>HF2881-303 10</b>, a product name, a bin like <b>A-041</b>, or a brand and sizes like <b>Nike - 7, 8</b> or <b>New Era - M</b>.</p><button class="cta" id="cta-scan">${CAM_SVG}Scan a barcode</button></div>`;
+    out.innerHTML = `<div class="empty"><div class="big">Where is it?</div><p>Search a style code like <b>HF2881</b>, a size like <b>HF2881-303 10</b>, a product name, a bin like <b>A-041</b>, or a brand with sizes or a kind: <b>Nike - 7, 8</b>, <b>Jordan - hat or cap</b>, <b>Adidas - womens shorts M</b>.</p><button class="cta" id="cta-scan">${CAM_SVG}Scan a barcode</button></div>`;
     return;
   }
   if (r.mode === 'flat') {
     const who = r.brands.length ? r.brands.join(', ') : `“${esc(r.left)}”`;
     if (r.needSizes) {
-      meta.innerHTML = `<span class="mode">Brand · size</span> · add sizes after the dash`;
-      out.innerHTML = `<div class="empty"><div class="big">${who} — which sizes?</div><p>Finish with the sizes you want, separated by commas: <b>${esc(r.left)} - 7, 8</b> or <b>${esc(r.left)} - M</b>.</p></div>`;
+      meta.innerHTML = `<span class="mode">Brand · filter</span> · add sizes or a kind after the dash`;
+      out.innerHTML = `<div class="empty"><div class="big">${who} — which sizes or kind?</div><p>Finish with sizes: <b>${esc(r.left)} - 7, 8</b> · or a kind of item: <b>${esc(r.left)} - socks</b>, <b>${esc(r.left)} - hat or cap</b> · or both: <b>${esc(r.left)} - womens shorts M</b>.</p></div>`;
       return;
     }
-    meta.innerHTML = `<span class="mode">Brand · size</span> · <b>${who}</b> · ${esc(r.sizes.join(', '))} · <b>${r.rows.length}</b> SKUs`;
+    const kindTxt = r.kinds && r.kinds.length ? ' · ' + esc(r.kinds.map(g => g.join(' ')).join(' or ')) : '';
+    meta.innerHTML = `<span class="mode">Brand · size</span> · <b>${who}</b>${kindTxt} · ${esc(r.sizes.join(', '))} · <b>${r.rows.length}</b> SKUs`;
     if (!r.rows.length) { out.innerHTML = `<div class="empty"><div class="big">Nothing in ${esc(r.sizes.join(' / '))} for ${who}</div><p>${r.brands.length ? 'No SKUs of that brand in those sizes have stock available.' : `No brand called “${esc(r.left)}” — check the spelling, or it's matching product names instead.`}</p></div>`; return; }
     out.innerHTML = flatCard(r) + (r.rows.length > LIMIT ? `<button class="more" id="more" data-step="60">Show ${Math.min(60, r.rows.length - LIMIT)} more of ${r.rows.length}</button>` : '');
     return;
@@ -582,8 +626,9 @@ function render() {
     return;
   }
   const n = r.styles.length, skus = r.styles.reduce((a, p) => a + p.sizes.length, 0);
-  meta.innerHTML = n ? `<b>${n}</b> style${n === 1 ? '' : 's'} · <b>${skus}</b> SKUs${r.hit ? ` · <span class="mode">scanned ${esc(r.hit)}</span>` : ''}` : 'No match';
-  if (!n) { out.innerHTML = `<div class="empty"><div class="big">Nothing found for “${esc(q)}”</div><p>Check the style code, or try fewer words. Items with nothing available in the warehouse or on the floor don't appear here.</p></div>`; return; }
+  const kindLbl = r.kind ? `<span class="mode">${esc(r.kind.brands.length ? r.kind.brands.join(', ') : r.kind.left)} · ${esc(r.kind.kinds.map(g => g.join(' ')).join(' or '))}</span> · ` : '';
+  meta.innerHTML = n ? `${kindLbl}<b>${n}</b> style${n === 1 ? '' : 's'} · <b>${skus}</b> SKUs${r.hit ? ` · <span class="mode">scanned ${esc(r.hit)}</span>` : ''}` : 'No match';
+  if (!n) { out.innerHTML = `<div class="empty"><div class="big">Nothing found for “${esc(q)}”</div><p>${r.kind ? 'No in-stock items of that kind for that brand. Try a broader word — <b>hat</b>, <b>socks</b>, <b>bag</b>, <b>shoes</b>, <b>tee</b>, <b>shorts</b> — or drop the size.' : 'Check the style code, or try fewer words. Items with nothing available in the warehouse or on the floor don\'t appear here.'}</p></div>`; return; }
   out.innerHTML = r.styles.slice(0, LIMIT).map(p => styleCard(p, r.hit)).join('') + (n > LIMIT ? `<button class="more" id="more">Show ${Math.min(20, n - LIMIT)} more of ${n}</button>` : '');
   if (r.hit) { const row = out.querySelector('tr.hl'); if (row) row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
 }

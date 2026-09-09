@@ -1,6 +1,7 @@
 /* shopify-prices.js — the price a SKU rings up at on Shopify POS.
    Pulls every product variant (sku, price, compareAtPrice, product status) via the Admin API and
-   returns Map<sku, { p: price, c: compareAtPrice|0 }>. Only ACTIVE products are sellable at POS —
+   returns Map<sku, { p: price, c: compareAtPrice|0, t: productType, g: tags }> (g = the audience/category
+   tags the search uses: Mens Womens Unisex Youth Kids Toddler Boys Girls APPAREL FOOTWEAR ACCESSORIES …). Only ACTIVE products are sellable at POS —
    DRAFT/ARCHIVED variants are skipped so the page shows "not on POS" instead of a dead price.
    compareAtPrice > price means the item is on sale: compareAt is the full price, price is what
    the customer pays. ~40 pages of 250, well inside the Plus throttle (20k bucket, 1k/s restore).
@@ -8,8 +9,9 @@
    CLI:    node shopify-prices.js            (prints counts + a few samples) */
 const { graphql } = require('./shopify');
 
+const KEEP_TAGS = new Set(['Mens','Womens','Unisex','Youth','Kids','Toddler','Boys','Girls','Adult','APPAREL','FOOTWEAR','ACCESSORIES','Lifestyle','Basketball','Training','Hydration']);
 const Q = `query($a:String){ productVariants(first:250, after:$a){
-  nodes{ sku price compareAtPrice product{ status } }
+  nodes{ sku price compareAtPrice product{ status productType tags } }
   pageInfo{ hasNextPage endCursor } } }`;
 
 async function gql(vars) {
@@ -32,7 +34,7 @@ async function fetchPrices() {
       const p = Number(v.price), c = v.compareAtPrice != null ? Number(v.compareAtPrice) : 0;
       if (!isFinite(p)) continue;
       // duplicate SKUs across variants: keep the first ACTIVE one seen
-      if (!out.has(sku)) out.set(sku, { p, c: c > p ? c : 0 });
+      if (!out.has(sku)) out.set(sku, { p, c: c > p ? c : 0, t: (v.product && v.product.productType) || '', g: ((v.product && v.product.tags) || []).filter(x => KEEP_TAGS.has(x)).join(' ') });
     }
     pages++;
     if (!pv.pageInfo.hasNextPage) break;

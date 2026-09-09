@@ -64,16 +64,16 @@ async function main() {
   catch (e) {
     console.error('shopify prices FAILED (carrying over previous): ' + e.message);
     prices = new Map();
-    try { for (const it of JSON.parse(fs.readFileSync(SEED_PATH, 'utf8')).items) if (it[7] != null) prices.set(it[0], { p: it[7], c: it[8] || 0 }); } catch (e2) {}
+    try { for (const it of JSON.parse(fs.readFileSync(SEED_PATH, 'utf8')).items) if (it[7] != null) prices.set(it[0], { p: it[7], c: it[8] || 0, t: it[9] || '', g: it[10] || '' }); } catch (e2) {}
     priceNote = `${prices.size} carried over`;
   }
 
-  // item record: [sku, name, brand, barcode, parent(style-colour), floorAvail, [[bin, avail], ...], price|null, compareAt|0]
+  // item record: [sku, name, brand, barcode, parent(style-colour), floorAvail, [[bin, avail], ...], price|null, compareAt|0, productType, tags]
   // price = what Shopify POS rings up (ACTIVE products only); compareAt > 0 = on sale, compareAt is the full price
   const by = new Map();
   const rec = r => {
     const sku = String(r.sku || '').trim(); if (!sku) return null;
-    if (!by.has(sku)) { const pr = prices.get(sku); by.set(sku, [sku, r.name || '', r.brand || '', r.barcode || '', r.parent || sku, 0, [], pr ? pr.p : null, pr ? pr.c : 0]); }
+    if (!by.has(sku)) { const pr = prices.get(sku); by.set(sku, [sku, r.name || '', r.brand || '', r.barcode || '', r.parent || sku, 0, [], pr ? pr.p : null, pr ? pr.c : 0, pr ? pr.t : '', pr ? pr.g : '']); }
     return by.get(sku);
   };
   for (const r of bins)  { const it = rec(r); if (!it) continue; const a = Number(r.avail) || 0; if (a > 0) it[6].push([r.bin, a]); }
