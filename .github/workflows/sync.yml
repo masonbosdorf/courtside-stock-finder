@@ -1,0 +1,51 @@
+name: stock-sync
+
+# Cloud data refresh for the Stock Finder — runs the pure-node NetSuite fetcher in GitHub's
+# infrastructure (no laptop). Triggered every 5 min by cron-job.org hitting the
+# workflow_dispatch API (reliable). GitHub's own `schedule:` is intentionally NOT used — it
+# fires unreliably and double-fires alongside cron-job.org, racing on the git push.
+
+on:
+  workflow_dispatch: {}        # fired by cron-job.org + the manual "Run workflow" button
+
+permissions:
+  contents: write              # allow committing the refreshed seed back
+
+concurrency:
+  group: stock-sync            # never overlap runs
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Stock fetch (NetSuite bins + floor → stock-seed.js)
+        env:
+          FS_ACCOUNT:         ${{ secrets.FS_ACCOUNT }}
+          FS_CONSUMER_KEY:    ${{ secrets.FS_CONSUMER_KEY }}
+          FS_CONSUMER_SECRET: ${{ secrets.FS_CONSUMER_SECRET }}
+          FS_TOKEN_ID:        ${{ secrets.FS_TOKEN_ID }}
+          FS_TOKEN_SECRET:    ${{ secrets.FS_TOKEN_SECRET }}
+        run: node stock-fetch.js "$GITHUB_WORKSPACE/stock-seed.js"
+
+      - name: Commit & push if the data changed
+        run: |
+          git config user.name  "stock-bot"
+          git config user.email "stock-bot@users.noreply.github.com"
+          git add stock-seed.js stock-meta.json
+          if git diff --cached --quiet; then
+            echo "no data change"
+          else
+            git commit -m "data $(TZ=Australia/Melbourne date +'%d-%m %H:%M') [cloud]"
+            # resilient publish: if another run pushed first, rebase on top and retry (no race failures)
+            for i in 1 2 3; do
+              git pull --rebase --autostash -q origin main && git push && break
+              echo "push race — retrying ($i)"; sleep 2
+            done
+          fi
