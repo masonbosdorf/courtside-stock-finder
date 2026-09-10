@@ -457,6 +457,10 @@ const EU_CHART = {
   converse: { m: { 6: 39, 6.5: 39.5, 7: 40, 7.5: 41, 8: 41.5, 8.5: 42, 9: 42.5, 9.5: 43, 10: 44, 10.5: 44.5, 11: 45, 11.5: 45.5, 12: 46.5, 13: 48 }, w: 2 },
 };
 const EU_BRAND = { NIKE: 'nike', JORDAN: 'nike', 'LI-NING': 'nike', 'WAY OF WADE': 'nike', CROCS: 'nike', ADIDAS: 'adidas', REEBOK: 'adidas', 'NEW BALANCE': 'nb', PUMA: 'puma', CONVERSE: 'converse' };
+/* "m10" / "w11.5": a US size on a stated scale, converted to the style's own scale (Sabrina is womens, so
+   m10 → W 11.5; Kobe is mens, so w11.5 → M 10). Offsets are the brand's (Nike 1.5, Adidas 1, Converse 2). */
+const isGendered = t => { const m = String(t).match(/^(m|w)(\d{1,2}(?:\.5)?)$/i); return m ? { g: m[1].toLowerCase(), us: parseFloat(m[2]) } : null; };
+const foldGender = s => String(s).replace(/\b(mens|men's|men|m)\s+(\d{1,2}(?:\.5)?)\b/gi, 'm$2').replace(/\b(womens|women's|women|wmns|w)\s+(\d{1,2}(?:\.5)?)\b/gi, 'w$2');
 const isEU = t => { const m = String(t).match(/^(?:eu)?(\d{2}(?:\.5)?)(?:eu)?$/i); const v = m && parseFloat(m[1]); return v >= 35 && v <= 53 ? v : null; };
 function styleGender(p) {
   const t = (p.tags || '').split(' ');
@@ -474,6 +478,13 @@ function euToUS(p, eu) {
 }
 /* does this SKU's size satisfy the query size token (US as typed, or EU converted for its style)? */
 function sizeHit(p, skuSize, tok) {
+  const gt = isGendered(tok);
+  if (gt) {
+    const g = styleGender(p); if (g === 'k') return null;
+    const chart = EU_CHART[EU_BRAND[p.brand] || 'nike'];
+    const us = g === gt.g ? gt.us : g === 'w' ? gt.us + chart.w : gt.us - chart.w;
+    return sizeEq(skuSize, String(us)) ? { us: String(us), g, from: gt } : null;
+  }
   const eu = isEU(tok);
   if (eu == null) return sizeEq(skuSize, tok) ? { us: skuSize } : null;
   const c = euToUS(p, eu); return c && sizeEq(skuSize, c.us) ? { us: c.us, g: c.g, eu } : null;
@@ -501,7 +512,7 @@ const KIND = {
   mens: ['#Mens'], men: 'mens', womens: ['#Womens'], women: 'womens', ladies: 'womens', unisex: ['#Unisex'], kids: ['#Kids', '#Youth', '#Boys', '#Girls', '#Toddler'], kid: 'kids', youth: 'kids', junior: 'kids', juniors: 'kids', boys: 'kids', girls: 'kids', toddler: ['#Toddler'],
 };
 const kindTargets = w => { let v = KIND[w]; while (typeof v === 'string') v = KIND[v]; return v || null; };
-const isSizeTok = t => /^[\d.]+[a-z]?$/i.test(t) || isEU(t) != null || SIZE_ORDER.includes(t.toUpperCase()) || t.toUpperCase() in SZ_ALIAS || /^[xsml]{1,4}(\/[xsml]{1,4})?$/i.test(t);
+const isSizeTok = t => /^[\d.]+[a-z]?$/i.test(t) || isEU(t) != null || isGendered(t) != null || SIZE_ORDER.includes(t.toUpperCase()) || t.toUpperCase() in SZ_ALIAS || /^[xsml]{1,4}(\/[xsml]{1,4})?$/i.test(t);
 function kindMatch(p, word) {
   const tg = kindTargets(word);
   if (tg) return tg.some(t => t[0] === '#' ? (p.tags || '').split(' ').includes(t.slice(1)) : (p.type || '') === t);
@@ -510,7 +521,7 @@ function kindMatch(p, word) {
 /* parse the right side: groups split on "," / " or "; sizes go to one OR-set, other words form kind groups (AND within, OR across) */
 function parseRight(right) {
   const sizes = new Set(), kinds = [];
-  for (const grp of right.split(/\s*,\s*|\s+or\s+/i).map(s => s.trim()).filter(Boolean)) {
+  for (const grp of foldGender(right).split(/\s*,\s*|\s+or\s+/i).map(s => s.trim()).filter(Boolean)) {
     const words = [];
     for (const t of grp.split(/\s+/)) { if (!t) continue; if (isSizeTok(t)) sizes.add(t.toUpperCase()); else words.push(t.toLowerCase()); }
     if (words.length) kinds.push(words);
@@ -548,10 +559,13 @@ function search(q) {
     const par = new Set(styles.map(p => p.parent)), euBySku = {}, conv = new Map();
     const rows = ITEMS.filter(it => {   // ITEMS is already in SKU order
       if (!par.has(it[4])) return false; const p = BY_PARENT.get(it[4]), sk = sizeOf(it[0], it[4]);
-      for (const s of sz.sizes) { const hit = sizeHit(p, sk, s); if (hit) { if (hit.eu) { euBySku[it[0]] = hit.eu; conv.set(hit.eu + '|' + hit.g, { eu: hit.eu, us: hit.us, g: hit.g }); } return true; } }
+      for (const s of sz.sizes) { const hit = sizeHit(p, sk, s); if (hit) {
+        if (hit.eu) { euBySku[it[0]] = 'EU ' + hit.eu; conv.set('eu' + hit.eu + '|' + hit.g, { from: 'EU ' + hit.eu, us: hit.us, g: hit.g, k: hit.eu }); }
+        else if (hit.from && hit.from.g !== hit.g) { const lbl = (hit.from.g === 'm' ? 'M ' : 'W ') + hit.from.us; euBySku[it[0]] = '= ' + lbl; conv.set(lbl + '|' + hit.g, { from: lbl, us: hit.us, g: hit.g, k: 100 + hit.from.us }); }
+        return true; } }
       return false;
     });
-    return { mode: 'flat', rows, ...sz, euBySku, conv: [...conv.values()].sort((a, b) => a.eu - b.eu || a.g.localeCompare(b.g)) };
+    return { mode: 'flat', rows, ...sz, euBySku, conv: [...conv.values()].sort((a, b) => a.k - b.k || a.g.localeCompare(b.g)) };
   }
   // bin mode: the query is (a prefix of) a bin code → list everything in matching bins
   if (toks.length === 1 && BIN_RE.test(raw)) {
@@ -625,7 +639,7 @@ function flatCard(r) {
     const [sku, name, brand, bc, parent, floor, bins] = it, w = bins.reduce((a, b) => a + b[1], 0);
     const chips = bins.length ? `<div class="stack">${bins.map(b => binChip(b[0], b[1])).join('')}</div>` : `<span class="none">—</span>`;
     const eu = r.euBySku && r.euBySku[sku];
-    return `<tr><td class="prod">${thumb(parent, true)}<div class="pt"><div class="nm">${esc(nice(name) || parent)}</div><div class="sk">${esc(sku)}${r.brands.length > 1 ? ' · ' + esc(brand) : ''} · ${rowPrice(it[7] ?? null, it[8] || 0)}</div></div></td><td class="size">${esc(sizeOf(sku, parent))}${eu ? `<div class="eu">EU ${eu}</div>` : ''}</td><td class="bins">${chips}</td><td class="n qty whcol ${w ? 'ok' : 'zero'}">${w || '—'}</td><td class="n floor ${floor ? '' : 'zero'}">${floor || '—'}</td></tr>`;
+    return `<tr><td class="prod">${thumb(parent, true)}<div class="pt"><div class="nm">${esc(nice(name) || parent)}</div><div class="sk">${esc(sku)}${r.brands.length > 1 ? ' · ' + esc(brand) : ''} · ${rowPrice(it[7] ?? null, it[8] || 0)}</div></div></td><td class="size">${esc(sizeOf(sku, parent))}${eu ? `<div class="eu">${esc(eu)}</div>` : ''}</td><td class="bins">${chips}</td><td class="n qty whcol ${w ? 'ok' : 'zero'}">${w || '—'}</td><td class="n floor ${floor ? '' : 'zero'}">${floor || '—'}</td></tr>`;
   }).join('');
   return `<section class="card flat">
     <div class="card-h"><div class="who"><div class="eyebrow"><span>${esc(label)}</span><span class="code">${r.rows.length} SKU${r.rows.length === 1 ? '' : 's'}</span></div><h2>Size ${esc(r.sizes.join(' / '))}</h2></div>
@@ -640,7 +654,7 @@ function render() {
   if (r.mode === 'flat' && LIMIT < 60) LIMIT = 60;
   if (r.mode === 'idle') {
     meta.textContent = 'Type or scan to search';
-    out.innerHTML = `<div class="empty"><div class="big">Where is it?</div><p>Search a style code like <b>HF2881</b>, a size like <b>HF2881-303 10</b>, a product name, a bin like <b>A-041</b>, or a brand with sizes or a kind: <b>Nike - 7, 8</b>, <b>Jordan - hat or cap</b>, <b>Adidas - womens shorts M</b>. EU sizes work too: <b>Kobe 8 - 44</b>.</p><button class="cta" id="cta-scan">${CAM_SVG}Scan a barcode</button></div>`;
+    out.innerHTML = `<div class="empty"><div class="big">Where is it?</div><p>Search a style code like <b>HF2881</b>, a size like <b>HF2881-303 10</b>, a product name, a bin like <b>A-041</b>, or a brand with sizes or a kind: <b>Nike - 7, 8</b>, <b>Jordan - hat or cap</b>, <b>Adidas - womens shorts M</b>. EU or the other scale work too: <b>Kobe 8 - 44</b>, <b>Sabrina 4 - m10</b>.</p><button class="cta" id="cta-scan">${CAM_SVG}Scan a barcode</button></div>`;
     return;
   }
   if (r.mode === 'flat') {
@@ -652,7 +666,7 @@ function render() {
     }
     const kindTxt = r.kinds && r.kinds.length ? ' · ' + esc(r.kinds.map(g => g.join(' ')).join(' or ')) : '';
     const G = { m: 'mens', w: 'womens', k: 'kids' };
-    const euTxt = r.conv && r.conv.length ? ' · <span class="mode">' + r.conv.map(c => `EU ${c.eu} → US ${c.us} ${G[c.g]}`).join(' · ') + '</span>' : '';
+    const euTxt = r.conv && r.conv.length ? ' · <span class="mode">' + r.conv.map(c => `${c.from} → US ${c.us} ${G[c.g]}`).join(' · ') + '</span>' : '';
     meta.innerHTML = `<span class="mode">Brand · size</span> · <b>${who}</b>${kindTxt} · ${esc(r.sizes.join(', '))}${euTxt} · <b>${r.rows.length}</b> SKUs`;
     if (!r.rows.length) { const euQ = r.sizes.map(isEU).filter(Boolean); out.innerHTML = `<div class="empty"><div class="big">Nothing in ${esc(r.sizes.join(' / '))} for ${who}</div><p>${euQ.length ? `EU ${euQ.join(' / ')} is converted per shoe (mens, womens or kids US sizing) — nothing in stock matched. Try the neighbouring half size.` : r.brands.length ? 'No SKUs of that brand in those sizes have stock available.' : `No brand called “${esc(r.left)}” — check the spelling, or it's matching product names instead.`}</p></div>`; return; }
     out.innerHTML = flatCard(r) + (r.rows.length > LIMIT ? `<button class="more" id="more" data-step="60">Show ${Math.min(60, r.rows.length - LIMIT)} more of ${r.rows.length}</button>` : '');
