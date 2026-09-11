@@ -200,6 +200,20 @@ html[data-device="tablet"] .pick .sh,html[data-device="desktop"] .pick .sh{max-w
 .pick .act button.pri{background:var(--gold);color:#111;border-color:transparent;}
 .pick .act button.danger{color:var(--bad);}
 .pick .empty{padding:36px 20px;}
+.pick .who{display:flex;align-items:center;gap:8px;padding:0 18px 10px;flex-wrap:wrap;}
+.pick .who .lb{font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--faint);font-weight:700;margin-right:2px;}
+.chip{height:32px;padding:0 12px;border-radius:999px;background:rgba(255,255,255,0.06);border:1px solid var(--line);color:var(--muted);font-weight:700;font-size:12px;display:inline-flex;align-items:center;gap:6px;}
+.chip.on{background:var(--gold);color:#111;border-color:transparent;}
+.chip input{width:110px;background:none;border:0;color:var(--signal);font-weight:700;font-size:12px;outline:none;}
+.pick .act button.log{background:var(--up);color:#0b2a17;border-color:transparent;}
+.pick .conf{padding:14px 18px;border-top:1px solid var(--line);background:var(--panel-2);}
+.pick .conf .big{font-family:"Archivo Black",sans-serif;font-size:18px;letter-spacing:-0.01em;margin-bottom:4px;}
+.pick .conf .d{font-size:12.5px;color:var(--muted);line-height:1.45;}
+.pick .conf .btns{display:flex;gap:8px;margin-top:12px;}
+.pick .conf .btns button{flex:1;height:44px;border-radius:12px;font-weight:700;font-size:13px;letter-spacing:0.06em;text-transform:uppercase;border:1px solid var(--line);color:var(--muted);}
+.pick .conf .btns button.go{background:var(--up);color:#0b2a17;border-color:transparent;}
+.pl.logged{opacity:0.45;}
+.qbadge{font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--gold);padding:6px 18px 0;}
 /* ===== footer ===== */
 .foot{position:fixed;left:0;right:0;bottom:0;z-index:20;background:rgba(12,12,12,0.86);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);}
 .foot-in{max-width:820px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px clamp(12px,3vw,24px);font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--faint);}
@@ -318,8 +332,11 @@ html[data-device="phone"] .foot-in .mid{display:none;}
 <button class="pickpill" id="pickpill" hidden></button>
 <div class="pick" id="pick" hidden><div class="sh">
   <div class="ph"><h2>Pick</h2><span class="sub" id="pick-sub"></span></div>
+  <div class="who" id="pick-who" hidden></div>
+  <div class="qbadge" id="pick-q" hidden></div>
   <div class="list" id="pick-list"></div>
-  <div class="act"><button id="pick-clear" class="danger">Clear all</button><button id="pick-ticked">Remove ticked</button><button id="pick-close" class="pri">Done</button></div>
+  <div class="conf" id="pick-conf" hidden></div>
+  <div class="act"><button id="pick-clear" class="danger">Clear all</button><button id="pick-ticked">Remove ticked</button><button id="pick-log" class="log" hidden>Log ticked</button><button id="pick-close" class="pri">Done</button></div>
 </div></div>
 
 <!-- ===== SCANNER ===== -->
@@ -665,7 +682,7 @@ function setQty(sku, bin, qty) {
   if (!PICK.items.length) PICK.at = 0; savePick(); paintPill(); paintPick(); render();
 }
 let flashT = null;
-function flash(t) { $('meta').innerHTML = `<span class="mode">${esc(t)}</span>`; clearTimeout(flashT); flashT = setTimeout(render, 1800); }
+function flash(t) { $('meta').innerHTML = `<span class="mode">${esc(t)}</span>`; $('pick-sub').textContent = t; clearTimeout(flashT); flashT = setTimeout(() => { render(); if (!$('pick').hidden) paintPick(); }, 2200); }
 function paintPill() {
   const n = PICK.items.length, u = PICK.items.reduce((a, x) => a + x.qty, 0), old = PICK.at && Date.now() - PICK.at > 24 * 3600e3;
   const pill = $('pickpill'); pill.hidden = !n;
@@ -687,8 +704,64 @@ function paintPick() {
   }
   $('pick-list').innerHTML = n ? html : `<div class="empty"><div class="big">Nothing on the pick</div><p>Search an item and tap a bin to add it.</p></div>`;
   $('pick-ticked').hidden = !d;
+  $('pick-log').hidden = !d || !TRANSFER_URL;
 }
-$('pickpill').addEventListener('click', () => { paintPick(); $('pick').hidden = false; });
+/* ---------- LOG TRANSFER → the "Courtside Internal Transfers" sheet (Apps Script web app, tier 1) ----------
+   Ticked lines become rows in the same columns the Google Form writes: staff, SKU, qty, from bin, to bin.
+   Batches that can't be sent (no wifi) queue on the device and retry every minute and on reopen. */
+const TRANSFER_URL = '';                              // Apps Script web app URL — empty = feature hidden
+const TRANSFER_SECRET = 'cs-stock-finder-2026';       // must match SECRET in tools/apps-script/Code.gs
+const STAFF = ['Anna', 'Denis', 'Jordan', 'Liron', 'Lizanne', 'Nick', 'Ollie', 'Tobias'];
+const TO_DEFAULT = 'SALES FLOOR';
+let staff = localStorage.getItem('sf_staff') || '', toBin = TO_DEFAULT, TXQ = [];
+try { TXQ = JSON.parse(localStorage.getItem('sf_txq') || '[]'); } catch (e) {}
+const saveQ = () => { try { localStorage.setItem('sf_txq', JSON.stringify(TXQ)); } catch (e) {} };
+function paintWho() {
+  const w = $('pick-who'); if (!TRANSFER_URL) { w.hidden = true; return; } w.hidden = false;
+  const names = STAFF.concat(staff && !STAFF.includes(staff) ? [staff] : []);
+  w.innerHTML = `<span class="lb">Picker</span>${names.map(n => `<button class="chip${n === staff ? ' on' : ''}" data-staff="${esc(n)}">${esc(n)}</button>`).join('')}<button class="chip${staff && !names.includes(staff) ? ' on' : ''}" data-staff="?">Other…</button>
+    <span class="lb" style="margin-left:6px">To</span><button class="chip${toBin === TO_DEFAULT ? ' on' : ''}" data-to="${TO_DEFAULT}">Sales floor</button><span class="chip${toBin !== TO_DEFAULT ? ' on' : ''}"><input id="to-bin" placeholder="or a bin…" value="${toBin !== TO_DEFAULT ? esc(toBin) : ''}" autocapitalize="characters" autocomplete="off"></span>`;
+  $('pick-q').hidden = !TXQ.length; if (TXQ.length) $('pick-q').textContent = `${TXQ.length} batch${TXQ.length === 1 ? '' : 'es'} waiting to send — will retry`;
+}
+$('pick-who').addEventListener('click', e => {
+  const b = e.target.closest('[data-staff]'); if (b) { if (b.dataset.staff === '?') { const n = prompt('Your name'); if (n && n.trim()) staff = n.trim(); } else staff = b.dataset.staff; localStorage.setItem('sf_staff', staff); paintWho(); return; }
+  const t = e.target.closest('[data-to]'); if (t) { toBin = TO_DEFAULT; paintWho(); }
+});
+$('pick-who').addEventListener('input', e => { if (e.target.id === 'to-bin') { toBin = e.target.value.trim().toUpperCase() || TO_DEFAULT; e.target.parentNode.classList.toggle('on', toBin !== TO_DEFAULT); e.target.parentNode.previousElementSibling.classList.toggle('on', toBin === TO_DEFAULT); } });
+async function postBatch(batch) {
+  const r = await fetch(TRANSFER_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(batch), redirect: 'follow' });
+  const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch (e) {}
+  if (!j || !j.ok) throw new Error((j && j.error) || ('HTTP ' + r.status));
+  return j;
+}
+async function flushQueue() {
+  if (!TRANSFER_URL || !TXQ.length || !navigator.onLine) return;
+  const b = TXQ[0];
+  try { await postBatch(b); TXQ.shift(); saveQ(); paintWho(); if (!TXQ.length) flash('Queued transfers sent'); if (TXQ.length) flushQueue(); } catch (e) {}
+}
+setInterval(flushQueue, 60000); addEventListener('online', flushQueue); flushQueue();
+function openConfirm() {
+  const lines = PICK.items.filter(x => x.done); if (!lines.length) return;
+  if (!staff) { flash('Pick your name first'); $('pick-who').scrollIntoView({ block: 'nearest' }); return; }
+  const u = lines.reduce((a, x) => a + x.qty, 0);
+  $('pick-conf').innerHTML = `<div class="big">${lines.length} line${lines.length === 1 ? '' : 's'} · ${u} unit${u === 1 ? '' : 's'} → ${esc(toBin)}</div>
+    <div class="d">Logged by <b>${esc(staff)}</b> to the Internal Transfers sheet as one row per line (SKU, qty, from bin, to). The lines leave the pick once sent.</div>
+    <div class="btns"><button id="conf-no">Back</button><button class="go" id="conf-go">Log transfer</button></div>`;
+  $('pick-conf').hidden = false; $('pick-conf').scrollIntoView({ block: 'nearest' });
+}
+async function logTicked() {
+  const lines = PICK.items.filter(x => x.done); if (!lines.length) return;
+  const batch = { secret: TRANSFER_SECRET, staff, device: document.documentElement.dataset.device, batch: 'b' + Date.now().toString(36),
+    rows: lines.map(x => ({ sku: x.sku, qty: x.qty, from: x.bin, to: toBin, note: '' })) };
+  PICK.items = PICK.items.filter(x => !x.done); if (!PICK.items.length) PICK.at = 0; savePick(); paintPill(); paintPick(); render();
+  $('pick-conf').hidden = true;
+  try { const j = await postBatch(batch); flash(`Logged ${j.appended} line${j.appended === 1 ? '' : 's'} to the transfers sheet`); }
+  catch (e) { TXQ.push(batch); saveQ(); paintWho(); flash('No connection — transfer queued, will send automatically'); }
+}
+$('pick-log').addEventListener('click', openConfirm);
+$('pick-conf').addEventListener('click', e => { if (e.target.id === 'conf-no') $('pick-conf').hidden = true; if (e.target.id === 'conf-go') logTicked(); });
+
+$('pickpill').addEventListener('click', () => { paintPick(); paintWho(); $('pick-conf').hidden = true; $('pick').hidden = false; });
 $('pick-close').addEventListener('click', () => { $('pick').hidden = true; });
 $('pick').addEventListener('click', e => { if (e.target.id === 'pick') $('pick').hidden = true; });
 $('pick-clear').addEventListener('click', () => { if (!PICK.items.length || confirm('Clear the whole pick?')) { PICK = { items: [], at: 0 }; savePick(); paintPill(); paintPick(); render(); } });
