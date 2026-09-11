@@ -20,7 +20,7 @@
 
 const SHEET_NAME = 'Sheet1';                     // created with clean headers if it doesn't exist / is empty
 const SECRET = 'cs-stock-finder-2026';          // must match TRANSFER_SECRET in the Stock Finder's index.html
-const SOURCE_TAG = 'Stock Finder';               // goes in "Notes (Not Sizes)" so these rows are easy to filter
+const SOURCE_TAG = 'Stock Finder';               // goes in the Source column so these rows are easy to filter
 
 const HEADERS = ['Timestamp', 'Employee', 'SKU', 'Quantity', 'From Bin', 'To Bin', 'Notes', 'Source', 'Batch', 'Status'];
 
