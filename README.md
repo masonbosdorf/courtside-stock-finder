@@ -31,6 +31,14 @@ the tiny stock-meta.json every 60s, and re-fetches the seed only when asOf chang
 | `vendor/barcode-detector.min.js` + `vendor/zxing_reader.wasm` | BarcodeDetector ponyfill (ZXing C++ → WebAssembly) used for camera scanning everywhere except Android Chrome; iOS Safari has no native barcode API |
 | `.github/workflows/sync.yml` | the cloud refresh |
 
+## Pick
+
+Tap a bin chip (or a row in bin view) to add that SKU-from-that-bin to the pick; tap again for
+another, capped at what's in the bin. A gold pill at the bottom opens the pick in bin walk
+order (aisle → bay → shelf → slot): tick lines off while walking, − / + / × per line, Remove
+ticked, Clear all. Stored per device in `localStorage` (`sf_pick`); nothing is written to
+NetSuite. Typing a bin code still opens that bin's contents.
+
 ## Access codes
 
 Codes are checked in the browser as SHA-256 hashes in `index.html` (`CODES` array). To add
