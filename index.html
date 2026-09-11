@@ -718,7 +718,7 @@ function toRow(l) {
 }
 function setTo(sku, bin, to) { const l = PICK.items.find(x => x.sku === sku && x.bin === bin); if (!l) return; l.to = String(to || '').trim().toUpperCase(); savePick(); }
 function paintPick() {
-  const items = PICK.items.slice().sort((a, b) => a.done - b.done || cmpBin(a.bin, b.bin) || a.sku.localeCompare(b.sku));
+  const items = PICK.items.slice().sort((a, b) => cmpBin(a.bin, b.bin) || a.done - b.done || a.sku.localeCompare(b.sku));   // walk order; ticked sink within their bin
   const n = items.length, u = items.reduce((a, x) => a + x.qty, 0), d = items.filter(x => x.done).length;
   $('pick-sub').textContent = n ? `${n} items · ${u} units · ${d} ticked · bin order` : '';
   let lastBin = null, html = '';
