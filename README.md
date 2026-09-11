@@ -42,7 +42,7 @@ NetSuite. Typing a bin code still opens that bin's contents.
 **Log transfer (tier 1):** with `TRANSFER_URL` set in `index.html`, ticked lines can be logged to the
 "Courtside Internal Transfers" Google Sheet via the Apps Script in `tools/apps-script/Code.gs` — one
 row per line on the **Sheet1** tab (Timestamp, Employee, SKU, Quantity, From Bin, To Bin, Notes,
-Source, Batch, Status; headers written if the tab is empty, matched by name if it already has them). Picker name is remembered per device; To defaults to SALES FLOOR.
+Source, Batch, Status; headers written if the tab is empty, matched by name if it already has them). Picker name is remembered per device. Every line has its own To: bin-sourced lines default to SALES FLOOR, floor-sourced lines start empty with the SKU's existing warehouse bins offered as one-tap suggestions (or type a bin); the confirm step previews each line's from → to.
 Failed sends queue in `sf_txq` and retry every minute. The manual sheet → NetSuite step is unchanged.
 
 ## Access codes

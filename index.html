@@ -214,6 +214,21 @@ html[data-device="tablet"] .pick .sh,html[data-device="desktop"] .pick .sh{max-w
 .pick .conf .btns{display:flex;gap:8px;margin-top:12px;}
 .pick .conf .btns button{flex:1;height:44px;border-radius:12px;font-weight:700;font-size:13px;letter-spacing:0.06em;text-transform:uppercase;border:1px solid var(--line);color:var(--muted);}
 .pick .conf .btns button.go{background:var(--up);color:#0b2a17;border-color:transparent;}
+.pl{flex-wrap:wrap;}
+.pl .to{flex-basis:100%;display:flex;align-items:center;gap:6px;padding:4px 0 2px 34px;flex-wrap:wrap;}
+.pl .to .arr{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--faint);font-weight:700;margin-right:2px;}
+.pl .to .tchip{height:28px;padding:0 10px;border-radius:999px;background:rgba(255,255,255,0.05);border:1px solid var(--line);color:var(--muted);font-family:"Archivo Black",sans-serif;font-size:11px;letter-spacing:0.03em;display:inline-flex;align-items:center;gap:5px;}
+.pl .to .tchip .q{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:10px;color:var(--up);}
+.pl .to .tchip.on{background:var(--gold);color:#111;border-color:transparent;} .pl .to .tchip.on .q{color:#5a4200;}
+.pl .to .tchip.fl{font-family:"Space Grotesk",sans-serif;font-weight:700;}
+.pl .to input{height:28px;width:120px;background:rgba(255,255,255,0.05);border:1px solid var(--line);border-radius:999px;padding:0 10px;color:var(--signal);font-family:"Archivo Black",sans-serif;font-size:11px;letter-spacing:0.03em;outline:none;}
+.pl .to input:focus{border-color:var(--gold);}
+.pl.need{box-shadow:inset 0 0 0 1.5px rgba(255,82,82,0.55);}
+.pl.need .to .arr{color:var(--bad);}
+.pick .conf ul{list-style:none;margin:8px 0 0;max-height:34vh;overflow-y:auto;}
+.pick .conf li{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-variant-numeric:tabular-nums;}
+.pick .conf li b{font-family:"Archivo Black",sans-serif;font-weight:400;letter-spacing:0.02em;}
+.pick .conf li .r{color:var(--muted);white-space:nowrap;}
 .pl.logged{opacity:0.45;}
 .qbadge{font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--gold);padding:6px 18px 0;}
 /* ===== footer ===== */
@@ -673,7 +688,7 @@ const cmpBin = (a, b) => { if (a === FLOOR || b === FLOOR) return a === b ? 0 : 
 function addPick(sku, bin, avail) {
   const it = BY_SKU.get(String(sku).toUpperCase()); if (!it) return;
   let l = PICK.items.find(x => x.sku === sku && x.bin === bin);
-  if (!l) { l = { sku, bin, parent: it[4], name: it[1], size: sizeOf(sku, it[4]), qty: 0, avail, done: false }; PICK.items.push(l); }
+  if (!l) { l = { sku, bin, parent: it[4], name: it[1], size: sizeOf(sku, it[4]), qty: 0, avail, done: false, to: bin === FLOOR ? '' : FLOOR }; PICK.items.push(l); }
   if (l.qty >= avail) { flash(`Only ${avail} in ${bin}`); return; }
   l.qty++; l.avail = avail; if (!PICK.items.length || !PICK.at) PICK.at = Date.now(); if (navigator.vibrate) navigator.vibrate(15);
   savePick(); render(); paintPill();
@@ -690,6 +705,18 @@ function paintPill() {
   const pill = $('pickpill'); pill.hidden = !n;
   if (n) pill.innerHTML = `<b>Pick</b> · ${n} item${n === 1 ? '' : 's'} · ${u} unit${u === 1 ? '' : 's'}${old ? ' <span class="old">· started ' + Math.floor((Date.now() - PICK.at) / 864e5) + 'd ago</span>' : ''}`;
 }
+/* per-line destination: Sales floor chip (default for bin-sourced lines), the SKU's other warehouse
+   bins as one-tap suggestions (where it already lives), or a typed bin */
+function toRow(l) {
+  const it = BY_SKU.get(l.sku.toUpperCase()); const bins = it ? it[6].filter(b => b[0] !== l.bin) : [];
+  const to = l.to == null ? (l.bin === FLOOR ? '' : FLOOR) : l.to;
+  const typed = to && to !== FLOOR && !bins.some(b => b[0] === to);
+  return `<div class="to"><span class="arr">→ to</span>
+    ${l.bin !== FLOOR ? `<button class="tchip fl${to === FLOOR ? ' on' : ''}" data-act="to" data-to="${FLOOR}">Sales floor</button>` : ''}
+    ${bins.map(b => `<button class="tchip${to === b[0] ? ' on' : ''}" data-act="to" data-to="${esc(b[0])}">${esc(b[0])}<span class="q">${b[1]}</span></button>`).join('')}
+    <input data-act="to-input" placeholder="${l.bin === FLOOR ? 'bin…' : 'other bin…'}" value="${typed ? esc(to) : ''}" autocapitalize="characters" autocomplete="off"></div>`;
+}
+function setTo(sku, bin, to) { const l = PICK.items.find(x => x.sku === sku && x.bin === bin); if (!l) return; l.to = String(to || '').trim().toUpperCase(); savePick(); }
 function paintPick() {
   const items = PICK.items.slice().sort((a, b) => a.done - b.done || cmpBin(a.bin, b.bin) || a.sku.localeCompare(b.sku));
   const n = items.length, u = items.reduce((a, x) => a + x.qty, 0), d = items.filter(x => x.done).length;
@@ -702,7 +729,8 @@ function paintPick() {
       <div class="t" data-act="tick"><div class="nm">${esc(nice(l.name) || l.parent)}</div><div class="sk">${esc(l.sku)}</div></div>
       <div class="sz">${esc(l.size)}</div>
       <div class="q"><button data-act="dec" aria-label="One less">−</button><b>${l.qty}</b><button data-act="inc" aria-label="One more">+</button></div>
-      <button class="x" data-act="del" aria-label="Remove">×</button></div>`;
+      <button class="x" data-act="del" aria-label="Remove">×</button>
+      ${toRow(l)}</div>`;
   }
   $('pick-list').innerHTML = n ? html : `<div class="empty"><div class="big">Nothing on the pick</div><p>Search an item and tap a bin to add it.</p></div>`;
   $('pick-ticked').hidden = !d;
@@ -715,21 +743,18 @@ const TRANSFER_URL = 'https://script.google.com/macros/s/AKfycbw9kiYLV5e1UpWcKH0
 const TRANSFER_SECRET = 'cs-stock-finder-2026';       // must match SECRET in tools/apps-script/Code.gs
 const STAFF = ['Anna', 'Denis', 'Jordan', 'Liron', 'Lizanne', 'Nick', 'Ollie', 'Tobias'];
 const TO_DEFAULT = 'SALES FLOOR';
-let staff = localStorage.getItem('sf_staff') || '', toBin = TO_DEFAULT, TXQ = [];
+let staff = localStorage.getItem('sf_staff') || '', TXQ = [];
 try { TXQ = JSON.parse(localStorage.getItem('sf_txq') || '[]'); } catch (e) {}
 const saveQ = () => { try { localStorage.setItem('sf_txq', JSON.stringify(TXQ)); } catch (e) {} };
 function paintWho() {
   const w = $('pick-who'); if (!TRANSFER_URL) { w.hidden = true; return; } w.hidden = false;
   const names = STAFF.concat(staff && !STAFF.includes(staff) ? [staff] : []);
-  w.innerHTML = `<span class="lb">Picker</span>${names.map(n => `<button class="chip${n === staff ? ' on' : ''}" data-staff="${esc(n)}">${esc(n)}</button>`).join('')}<button class="chip${staff && !names.includes(staff) ? ' on' : ''}" data-staff="?">Other…</button>
-    <span class="lb" style="margin-left:6px">To</span><button class="chip${toBin === TO_DEFAULT ? ' on' : ''}" data-to="${TO_DEFAULT}">Sales floor</button><span class="chip${toBin !== TO_DEFAULT ? ' on' : ''}"><input id="to-bin" placeholder="or a bin…" value="${toBin !== TO_DEFAULT ? esc(toBin) : ''}" autocapitalize="characters" autocomplete="off"></span>`;
+  w.innerHTML = `<span class="lb">Picker</span>${names.map(n => `<button class="chip${n === staff ? ' on' : ''}" data-staff="${esc(n)}">${esc(n)}</button>`).join('')}<button class="chip${staff && !names.includes(staff) ? ' on' : ''}" data-staff="?">Other…</button>`;
   $('pick-q').hidden = !TXQ.length; if (TXQ.length) $('pick-q').textContent = `${TXQ.length} batch${TXQ.length === 1 ? '' : 'es'} waiting to send — will retry`;
 }
 $('pick-who').addEventListener('click', e => {
   const b = e.target.closest('[data-staff]'); if (b) { if (b.dataset.staff === '?') { const n = prompt('Your name'); if (n && n.trim()) staff = n.trim(); } else staff = b.dataset.staff; localStorage.setItem('sf_staff', staff); paintWho(); return; }
-  const t = e.target.closest('[data-to]'); if (t) { toBin = TO_DEFAULT; paintWho(); }
 });
-$('pick-who').addEventListener('input', e => { if (e.target.id === 'to-bin') { toBin = e.target.value.trim().toUpperCase() || TO_DEFAULT; e.target.parentNode.classList.toggle('on', toBin !== TO_DEFAULT); e.target.parentNode.previousElementSibling.classList.toggle('on', toBin === TO_DEFAULT); } });
 async function postBatch(batch) {
   const r = await fetch(TRANSFER_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(batch), redirect: 'follow' });
   const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch (e) {}
@@ -745,17 +770,21 @@ setInterval(flushQueue, 60000); addEventListener('online', flushQueue); flushQue
 function openConfirm() {
   const lines = PICK.items.filter(x => x.done); if (!lines.length) return;
   if (!staff) { flash('Pick your name first'); $('pick-who').scrollIntoView({ block: 'nearest' }); return; }
-  if (lines.some(x => x.bin === FLOOR) && toBin === TO_DEFAULT) { flash('Lines from the floor need a bin in "To"'); $('pick-who').scrollIntoView({ block: 'nearest' }); return; }
-  const u = lines.reduce((a, x) => a + x.qty, 0);
-  $('pick-conf').innerHTML = `<div class="big">${lines.length} line${lines.length === 1 ? '' : 's'} · ${u} unit${u === 1 ? '' : 's'} → ${esc(toBin)}</div>
-    <div class="d">Logged by <b>${esc(staff)}</b> to the Internal Transfers sheet as one row per line (SKU, qty, from bin, to). The lines leave the pick once sent.</div>
+  const lineTo = x => x.to == null ? (x.bin === FLOOR ? '' : FLOOR) : x.to;
+  const missing = lines.filter(x => !lineTo(x));
+  if (missing.length) { flash(`${missing.length} line${missing.length === 1 ? '' : 's'} from the floor need a "to" bin`); document.querySelectorAll('.pl').forEach(el => el.classList.toggle('need', missing.some(m => m.sku === el.dataset.sku && m.bin === el.dataset.bin))); const first = document.querySelector('.pl.need'); if (first) first.scrollIntoView({ block: 'center' }); return; }
+  const u = lines.reduce((a, x) => a + x.qty, 0), toFloor = lines.filter(x => lineTo(x) === FLOOR).length, toBins = lines.length - toFloor;
+  const parts = []; if (toFloor) parts.push(`${toFloor} → Sales floor`); if (toBins) parts.push(`${toBins} → bins`);
+  $('pick-conf').innerHTML = `<div class="big">${lines.length} line${lines.length === 1 ? '' : 's'} · ${u} unit${u === 1 ? '' : 's'} · ${parts.join(' · ')}</div>
+    <div class="d">Check each line, then log. Logged by <b>${esc(staff)}</b> to Sheet1 of the Internal Transfers sheet, one row per line. Lines leave the pick once sent.</div>
+    <ul>${lines.slice().sort((a, b) => cmpBin(a.bin, b.bin)).map(x => `<li><span><b>${esc(x.sku)}</b> ×${x.qty}</span><span class="r">${x.bin === FLOOR ? 'Floor' : esc(x.bin)} → ${lineTo(x) === FLOOR ? 'Sales floor' : esc(lineTo(x))}</span></li>`).join('')}</ul>
     <div class="btns"><button id="conf-no">Back</button><button class="go" id="conf-go">Log transfer</button></div>`;
   $('pick-conf').hidden = false; $('pick-conf').scrollIntoView({ block: 'nearest' });
 }
 async function logTicked() {
   const lines = PICK.items.filter(x => x.done); if (!lines.length) return;
   const batch = { secret: TRANSFER_SECRET, staff, device: document.documentElement.dataset.device, batch: 'b' + Date.now().toString(36),
-    rows: lines.map(x => ({ sku: x.sku, qty: x.qty, from: x.bin, to: toBin, note: '' })) };
+    rows: lines.map(x => ({ sku: x.sku, qty: x.qty, from: x.bin, to: (x.to == null ? (x.bin === FLOOR ? '' : FLOOR) : x.to) || FLOOR, note: '' })) };
   PICK.items = PICK.items.filter(x => !x.done); if (!PICK.items.length) PICK.at = 0; savePick(); paintPill(); paintPick(); render();
   $('pick-conf').hidden = true;
   try { const j = await postBatch(batch); flash(`Logged ${j.appended} line${j.appended === 1 ? '' : 's'} to the transfers sheet`); }
@@ -774,7 +803,10 @@ $('pick-list').addEventListener('click', e => {
   const l = PICK.items.find(x => x.sku === sku && x.bin === bin); if (!l) return;
   if (act === 'inc') setQty(sku, bin, l.qty + 1); else if (act === 'dec') setQty(sku, bin, l.qty - 1); else if (act === 'del') setQty(sku, bin, 0);
   else if (act === 'tick') { l.done = !l.done; savePick(); paintPick(); }
+  else if (act === 'to') { setTo(sku, bin, e.target.closest('[data-to]').dataset.to); paintPick(); }
 });
+$('pick-list').addEventListener('input', e => { if (e.target.dataset.act !== 'to-input') return; const row = e.target.closest('.pl'); setTo(row.dataset.sku, row.dataset.bin, e.target.value); row.querySelectorAll('.tchip').forEach(c => c.classList.toggle('on', false)); row.classList.remove('need'); });
+$('pick-list').addEventListener('focusout', e => { if (e.target.dataset.act === 'to-input' && !e.target.value.trim()) { const row = e.target.closest('.pl'); const l = PICK.items.find(x => x.sku === row.dataset.sku && x.bin === row.dataset.bin); if (l && l.bin !== FLOOR && !l.to) { l.to = FLOOR; savePick(); } paintPick(); } });
 addEventListener('keydown', e => { if (e.key === 'Escape' && !$('pick').hidden) $('pick').hidden = true; });
 paintPill();
 
