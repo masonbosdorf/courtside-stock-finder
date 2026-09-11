@@ -41,8 +41,8 @@ NetSuite. Typing a bin code still opens that bin's contents.
 
 **Log transfer (tier 1):** with `TRANSFER_URL` set in `index.html`, ticked lines can be logged to the
 "Courtside Internal Transfers" Google Sheet via the Apps Script in `tools/apps-script/Code.gs` — one
-row per line in the Google Form's own columns (Employee, SKU, Quantity, From Bin, To Bin), tagged
-"Stock Finder" in Notes (Not Sizes). Picker name is remembered per device; To defaults to SALES FLOOR.
+row per line on the **Sheet1** tab (Timestamp, Employee, SKU, Quantity, From Bin, To Bin, Notes,
+Source, Batch, Status; headers written if the tab is empty, matched by name if it already has them). Picker name is remembered per device; To defaults to SALES FLOOR.
 Failed sends queue in `sf_txq` and retry every minute. The manual sheet → NetSuite step is unchanged.
 
 ## Access codes
