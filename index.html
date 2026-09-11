@@ -116,6 +116,8 @@ tbody tr:last-child td{border-bottom:0;}
 tbody tr.hl td{background:rgba(70,224,138,0.08);}
 tbody tr.hl td.size{color:var(--up);}
 td.size{font-weight:700;font-size:15px;white-space:nowrap;width:1%;}
+.bin.floor{background:rgba(255,214,107,0.08);border-color:rgba(255,214,107,0.35);font-size:12px;}
+.bin.floor .q{color:var(--gold);}
 td.size .eu{font-size:10px;letter-spacing:0.1em;color:var(--gold);font-weight:700;margin-top:2px;}
 td.bins{color:var(--muted);}
 .stack{display:flex;flex-wrap:wrap;gap:6px;}
@@ -667,7 +669,7 @@ const pickKey = (sku, bin) => sku + '|' + bin;
 const pickQty = (sku, bin) => { const l = PICK.items.find(x => x.sku === sku && x.bin === bin); return l ? l.qty : 0; };
 /* bin walk order: A-041-03-011 → aisle letter, then each number */
 const binKey = b => String(b).split('-').map(s => /^\d+$/.test(s) ? s.padStart(4, '0') : s.toUpperCase());
-const cmpBin = (a, b) => { const A = binKey(a), B = binKey(b); for (let i = 0; i < Math.max(A.length, B.length); i++) { const c = (A[i] || '').localeCompare(B[i] || ''); if (c) return c; } return 0; };
+const cmpBin = (a, b) => { if (a === FLOOR || b === FLOOR) return a === b ? 0 : a === FLOOR ? 1 : -1; const A = binKey(a), B = binKey(b); for (let i = 0; i < Math.max(A.length, B.length); i++) { const c = (A[i] || '').localeCompare(B[i] || ''); if (c) return c; } return 0; };
 function addPick(sku, bin, avail) {
   const it = BY_SKU.get(String(sku).toUpperCase()); if (!it) return;
   let l = PICK.items.find(x => x.sku === sku && x.bin === bin);
@@ -709,7 +711,7 @@ function paintPick() {
 /* ---------- LOG TRANSFER → the "Courtside Internal Transfers" sheet (Apps Script web app, tier 1) ----------
    Ticked lines become rows in the same columns the Google Form writes: staff, SKU, qty, from bin, to bin.
    Batches that can't be sent (no wifi) queue on the device and retry every minute and on reopen. */
-const TRANSFER_URL = '';                              // Apps Script web app URL — empty = feature hidden
+const TRANSFER_URL = 'https://script.google.com/macros/s/AKfycbw9kiYLV5e1UpWcKH0OOTy7OR0I9M0EjoucQ8kbEqf08h3y3CrQIiS6LRZAxaBcvVtjKA/exec';   // Apps Script web app on the Internal Transfers sheet — empty = feature hidden
 const TRANSFER_SECRET = 'cs-stock-finder-2026';       // must match SECRET in tools/apps-script/Code.gs
 const STAFF = ['Anna', 'Denis', 'Jordan', 'Liron', 'Lizanne', 'Nick', 'Ollie', 'Tobias'];
 const TO_DEFAULT = 'SALES FLOOR';
@@ -743,6 +745,7 @@ setInterval(flushQueue, 60000); addEventListener('online', flushQueue); flushQue
 function openConfirm() {
   const lines = PICK.items.filter(x => x.done); if (!lines.length) return;
   if (!staff) { flash('Pick your name first'); $('pick-who').scrollIntoView({ block: 'nearest' }); return; }
+  if (lines.some(x => x.bin === FLOOR) && toBin === TO_DEFAULT) { flash('Lines from the floor need a bin in "To"'); $('pick-who').scrollIntoView({ block: 'nearest' }); return; }
   const u = lines.reduce((a, x) => a + x.qty, 0);
   $('pick-conf').innerHTML = `<div class="big">${lines.length} line${lines.length === 1 ? '' : 's'} · ${u} unit${u === 1 ? '' : 's'} → ${esc(toBin)}</div>
     <div class="d">Logged by <b>${esc(staff)}</b> to the Internal Transfers sheet as one row per line (SKU, qty, from bin, to). The lines leave the pick once sent.</div>
@@ -778,10 +781,12 @@ paintPill();
 /* ---------- render ---------- */
 let LIMIT = 20;
 const CAM_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8M10 8v8M13 8v8M17 8v8"/></svg>';
-function binChip(bin, av, sku) { const n = pickQty(sku, bin); return `<button class="bin${n ? ' in' : ''}" data-bin="${esc(bin)}" data-sku="${esc(sku)}" data-avail="${av}" title="Add ${esc(sku)} from ${esc(bin)} to the pick">${esc(bin)}<span class="q">${av}</span>${n ? `<span class="pk">×${n}</span>` : ''}</button>`; }
+const FLOOR = 'SALES FLOOR';   // NetSuite location 22, shown as a source chip so a pick can run floor → bin too
+function binChip(bin, av, sku) { const n = pickQty(sku, bin); return `<button class="bin${n ? ' in' : ''}${bin === FLOOR ? ' floor' : ''}" data-bin="${esc(bin)}" data-sku="${esc(sku)}" data-avail="${av}" title="Add ${esc(sku)} from ${esc(bin)} to the pick">${bin === FLOOR ? 'FLOOR' : esc(bin)}<span class="q">${av}</span>${n ? `<span class="pk">×${n}</span>` : ''}</button>`; }
 function styleCard(p, hit) {
   const rows = p.sizes.map(s => {
-    const bins = s.bins.length ? `<div class="stack">${s.bins.map(b => binChip(b[0], b[1], s.sku)).join('')}</div>` : `<span class="none">—</span>`;
+    const chipsA = s.bins.map(b => binChip(b[0], b[1], s.sku)).concat(s.floor ? [binChip(FLOOR, s.floor, s.sku)] : []);
+    const bins = chipsA.length ? `<div class="stack">${chipsA.join('')}</div>` : `<span class="none">—</span>`;
     const rp = p.pricing.mixed ? `<td class="n rp ${s.price == null ? 'np' : s.cmp ? 'sale' : ''}">${s.price == null ? '—' : money(s.price)}${s.cmp ? `<s>${money(s.cmp)}</s><span class="off">−${pct(s.price, s.cmp)}%</span>` : ''}</td>` : '';
     return `<tr class="${hit && s.sku === hit ? 'hl' : ''}"><td class="size">${esc(s.size)}</td><td class="bins">${bins}</td>${rp}<td class="n qty ${s.wh ? 'ok' : 'zero'}">${s.wh || '—'}</td><td class="n floor ${s.floor ? '' : 'zero'}">${s.floor || '—'}</td></tr>`;
   }).join('');
@@ -810,7 +815,8 @@ function flatCard(r) {
   const wh = r.rows.reduce((a, it) => a + it[6].reduce((x, b) => x + b[1], 0), 0), fl = r.rows.reduce((a, it) => a + it[5], 0);
   const rows = r.rows.slice(0, LIMIT).map(it => {
     const [sku, name, brand, bc, parent, floor, bins] = it, w = bins.reduce((a, b) => a + b[1], 0);
-    const chips = bins.length ? `<div class="stack">${bins.map(b => binChip(b[0], b[1], sku)).join('')}</div>` : `<span class="none">—</span>`;
+    const chipsB = bins.map(b => binChip(b[0], b[1], sku)).concat(floor ? [binChip(FLOOR, floor, sku)] : []);
+    const chips = chipsB.length ? `<div class="stack">${chipsB.join('')}</div>` : `<span class="none">—</span>`;
     const eu = r.euBySku && r.euBySku[sku];
     return `<tr><td class="prod">${thumb(parent, true)}<div class="pt"><div class="nm">${esc(nice(name) || parent)}</div><div class="sk">${esc(sku)}${r.brands.length > 1 ? ' · ' + esc(brand) : ''} · ${rowPrice(it[7] ?? null, it[8] || 0)}</div></div></td><td class="size">${esc(sizeOf(sku, parent))}${eu ? `<div class="eu">${esc(eu)}</div>` : ''}</td><td class="bins">${chips}</td><td class="n qty whcol ${w ? 'ok' : 'zero'}">${w || '—'}</td><td class="n floor ${floor ? '' : 'zero'}">${floor || '—'}</td></tr>`;
   }).join('');
