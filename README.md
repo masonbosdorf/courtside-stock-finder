@@ -13,8 +13,9 @@ cron-job.org (every 5 min) → workflow_dispatch → GitHub Actions "stock-sync"
   └─ node stock-fetch.js  → 2 paginated SuiteQL pulls (TBA / OAuth 1.0a)
   └─ writes stock-seed.json + stock-meta.json (asOf)
   └─ commits + pushes only if the data changed
-GitHub Pages serves index.html + the seed. The browser starts fetching the seed the moment the
-page opens (before the code is typed), caches it in localStorage so repeat opens are instant, polls
+GitHub Pages serves index.html + the seed. The page checks its own ETag every 10 min (and on
+returning to the foreground) and reloads at an idle moment when a new version is published.
+The browser starts fetching the seed the moment the page opens (before the code is typed), caches it in localStorage so repeat opens are instant, polls
 the tiny stock-meta.json every 60s, and re-fetches the seed only when asOf changes.
 ```
 

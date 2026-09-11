@@ -734,6 +734,20 @@ async function boot() {
 // start the download immediately — before the code is entered — unless data was inlined
 if (!window.STOCK_SEED) refresh().catch(() => {});
 
+/* ---------- auto-update the page itself: every 10 min compare index.html's ETag with the one we
+   loaded; if a new version was published, reload at an idle moment (no query, no scanner open).
+   Stock data is separate — that already refreshes every minute via stock-meta.json. ---------- */
+(() => {
+  let tag = null, pending = false;
+  const etag = async () => { try { const r = await fetch(location.pathname.replace(/[^/]*$/, '') + 'index.html', { method: 'HEAD', cache: 'no-store' }); return r.ok ? (r.headers.get('etag') || r.headers.get('last-modified')) : null; } catch (e) { return null; } };
+  const idle = () => !$('q').value && $('scan').hidden && $('lock').hidden;
+  const check = async () => { const t = await etag(); if (!t) return; if (tag == null) { tag = t; return; } if (t !== tag) { pending = true; if (idle()) location.reload(); } };
+  etag().then(t => { tag = t; });
+  setInterval(check, 10 * 60 * 1000);
+  setInterval(() => { if (pending && idle()) location.reload(); }, 30 * 1000);   // deferred reload once they're done
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });   // and whenever the app comes back to the front
+})();
+
 /* ---------- camera barcode scanner ----------
    One code path, the BarcodeDetector API. iPhone/iPad Safari has NO native BarcodeDetector
    (only the Camera app can read codes), and Chrome-on-Mac's is unreliable, so everywhere except
