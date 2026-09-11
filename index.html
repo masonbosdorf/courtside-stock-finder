@@ -152,6 +152,13 @@ td.rp{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:700;width
 td.rp.sale{color:var(--gold);} td.rp s{color:var(--faint);font-weight:500;font-size:12px;margin-left:5px;} td.rp .off{color:var(--gold);font-size:10px;margin-left:5px;letter-spacing:0.08em;}
 td.rp.np{color:var(--ghost);font-weight:600;font-size:12px;}
 .sk .pr{color:var(--muted);font-weight:700;} .sk .pr.sale{color:var(--gold);} .sk .pr s{color:var(--faint);font-weight:500;} .sk .pr .off{color:var(--gold);}
+/* online light: green pulse = active + published to the Online Store; red = not */
+.ol{display:inline-block;width:8px;height:8px;border-radius:50%;flex:0 0 auto;vertical-align:middle;}
+.ol.on{background:var(--up);box-shadow:0 0 6px var(--up);animation:olblink 1.6s ease-in-out infinite;}
+.ol.off{background:var(--bad);box-shadow:0 0 4px rgba(255,82,82,0.5);}
+@keyframes olblink{0%,100%{opacity:1}50%{opacity:0.25}}
+@media (prefers-reduced-motion:reduce){.ol.on{animation:none;}}
+.eyebrow .ol{margin-right:2px;}
 /* bin-mode card: one bin, many products */
 .card.binview .card-h h2{font-family:"Archivo Black",sans-serif;font-size:clamp(24px,6vw,34px);letter-spacing:-0.02em;}
 td.prod{min-width:0;}
@@ -478,6 +485,7 @@ function buildIndex() {
     const wh = bins.reduce((a, b) => a + b[1], 0);
     p.sizes.push({ sku, size: sizeOf(sku, parent), bc, floor, bins, wh, price: it[7] ?? null, cmp: it[8] || 0 });
     if (!p.type && it[9]) p.type = it[9];
+    if (it[11]) p.online = true;
     if (!p.tags && it[10]) p.tags = it[10];
     p.wh += wh; p.floor += floor;
     if (bc) BY_BC.set(String(bc), it);
@@ -674,6 +682,7 @@ function priceHTML(pr) {
   return `<div class="price"><span class="now">${money(pr.price)}</span></div>`;
 }
 const rowPrice = (price, cmp) => price == null ? `<span class="pr np">not on POS</span>` : cmp ? `<span class="pr sale">${money(price)} <s>${money(cmp)}</s> <span class="off">−${pct(price, cmp)}%</span></span>` : `<span class="pr">${money(price)}</span>`;
+const light = on => `<span class="ol ${on ? 'on' : 'off'}" title="${on ? 'Online — live on the web store' : 'Not online — POS only or unpublished'}"></span>`;
 /* thumbnails: img/<parent with anything outside [A-Za-z0-9._-] → "_">.webp, lazy, placeholder on 404 */
 const thumbSrc = parent => 'img/' + String(parent).replace(/[^A-Za-z0-9._-]/g, '_') + '.webp';
 const thumb = (parent, sm) => `<span class="th${sm ? ' sm' : ''}"><img src="${thumbSrc(parent)}" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add('none')"></span>`;
@@ -825,7 +834,7 @@ function styleCard(p, hit) {
   const rph = p.pricing.mixed ? '<th class="n">Price</th>' : '';
   return `<section class="card${hit ? ' hit' : ''}">
     <div class="card-h">${thumb(p.parent)}<div class="who">
-      <div class="eyebrow"><span>${esc(p.brand || '—')}</span><span class="code">${esc(p.parent)}</span></div>
+      <div class="eyebrow">${light(!!p.online)}<span>${esc(p.brand || '—')}</span><span class="code">${esc(p.parent)}</span></div>
       <h2>${esc(nice(p.name) || p.parent)}</h2>
       ${priceHTML(p.pricing)}
     </div>
@@ -835,7 +844,7 @@ function styleCard(p, hit) {
 }
 function binCard(b) {
   const rows = b.rows.sort((x, y) => x.p.name.localeCompare(y.p.name) || cmpSize(x.s.size, y.s.size)).map(({ p, s, av }) =>
-    `<tr data-sku="${esc(s.sku)}" data-bin="${esc(b.bin)}" data-avail="${av}"><td class="prod">${thumb(p.parent, true)}<div class="pt"><div class="nm">${esc(nice(p.name) || p.parent)}</div><div class="sk">${esc(p.brand || '—')} · ${esc(s.sku)} · ${rowPrice(s.price, s.cmp)}</div></div></td><td class="size">${esc(s.size)}</td><td class="n qty ok">${av}</td><td class="add">${pickQty(s.sku, b.bin) ? '×' + pickQty(s.sku, b.bin) : '+'}</td></tr>`).join('');
+    `<tr data-sku="${esc(s.sku)}" data-bin="${esc(b.bin)}" data-avail="${av}"><td class="prod">${thumb(p.parent, true)}<div class="pt"><div class="nm">${esc(nice(p.name) || p.parent)}</div><div class="sk">${light(!!p.online)} ${esc(p.brand || '—')} · ${esc(s.sku)} · ${rowPrice(s.price, s.cmp)}</div></div></td><td class="size">${esc(s.size)}</td><td class="n qty ok">${av}</td><td class="add">${pickQty(s.sku, b.bin) ? '×' + pickQty(s.sku, b.bin) : '+'}</td></tr>`).join('');
   return `<section class="card binview">
     <div class="card-h"><div class="who"><div class="eyebrow"><span>Bin</span><span class="code">${b.rows.length} SKU${b.rows.length === 1 ? '' : 's'}</span></div><h2>${esc(b.bin)}</h2></div>
     <div class="tot"><div><div class="v">${b.units}</div><div class="l">Units avail</div></div></div></div>
@@ -850,7 +859,7 @@ function flatCard(r) {
     const chipsB = bins.map(b => binChip(b[0], b[1], sku)).concat(floor ? [binChip(FLOOR, floor, sku)] : []);
     const chips = chipsB.length ? `<div class="stack">${chipsB.join('')}</div>` : `<span class="none">—</span>`;
     const eu = r.euBySku && r.euBySku[sku];
-    return `<tr><td class="prod">${thumb(parent, true)}<div class="pt"><div class="nm">${esc(nice(name) || parent)}</div><div class="sk">${esc(sku)}${r.brands.length > 1 ? ' · ' + esc(brand) : ''} · ${rowPrice(it[7] ?? null, it[8] || 0)}</div></div></td><td class="size">${esc(sizeOf(sku, parent))}${eu ? `<div class="eu">${esc(eu)}</div>` : ''}</td><td class="bins">${chips}</td><td class="n qty whcol ${w ? 'ok' : 'zero'}">${w || '—'}</td><td class="n floor ${floor ? '' : 'zero'}">${floor || '—'}</td></tr>`;
+    return `<tr><td class="prod">${thumb(parent, true)}<div class="pt"><div class="nm">${esc(nice(name) || parent)}</div><div class="sk">${light(!!it[11])} ${esc(sku)}${r.brands.length > 1 ? ' · ' + esc(brand) : ''} · ${rowPrice(it[7] ?? null, it[8] || 0)}</div></div></td><td class="size">${esc(sizeOf(sku, parent))}${eu ? `<div class="eu">${esc(eu)}</div>` : ''}</td><td class="bins">${chips}</td><td class="n qty whcol ${w ? 'ok' : 'zero'}">${w || '—'}</td><td class="n floor ${floor ? '' : 'zero'}">${floor || '—'}</td></tr>`;
   }).join('');
   return `<section class="card flat">
     <div class="card-h"><div class="who"><div class="eyebrow"><span>${esc(label)}</span><span class="code">${r.rows.length} SKU${r.rows.length === 1 ? '' : 's'}</span></div><h2>Size ${esc(r.sizes.join(' / '))}</h2></div>
