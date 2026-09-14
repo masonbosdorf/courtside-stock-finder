@@ -21,7 +21,7 @@ const TZ = 'Australia/Melbourne';
 const Q_BINS = `
   SELECT i.itemid AS sku, i.displayname AS name, i.upccode AS barcode,
          BUILTIN.DF(i.parent) AS parent, BUILTIN.DF(i.cseg_ps_brand) AS brand,
-         BUILTIN.DF(ibq.bin) AS bin, ibq.onhandavail AS avail
+         BUILTIN.DF(ibq.bin) AS bin, ibq.onhandavail AS avail, ibq.onhand AS onhand
   FROM itembinquantity ibq
   JOIN item i ON i.id = ibq.item
   JOIN bin  b ON b.id = ibq.bin
@@ -31,10 +31,10 @@ const Q_BINS = `
 const Q_FLOOR = `
   SELECT i.itemid AS sku, i.displayname AS name, i.upccode AS barcode,
          BUILTIN.DF(i.parent) AS parent, BUILTIN.DF(i.cseg_ps_brand) AS brand,
-         ail.quantityavailable AS floor
+         ail.quantityavailable AS floor, ail.quantityonhand AS flooroh
   FROM aggregateitemlocation ail
   JOIN item i ON i.id = ail.item
-  WHERE ail.location = 22 AND ail.quantityavailable > 0
+  WHERE ail.location = 22 AND ail.quantityonhand > 0
   ORDER BY ail.item`;
 
 // sanity floors — a pull far below these means NetSuite returned a partial result
@@ -68,27 +68,28 @@ async function main() {
     priceNote = `${prices.size} carried over`;
   }
 
-  // item record: [sku, name, brand, barcode, parent(style-colour), floorAvail, [[bin, avail], ...], price|null, compareAt|0, productType, tags, online 1|0]
+  // item record: [sku, name, brand, barcode, parent(style-colour), floorAvail, [[bin, avail, held], ...], price|null, compareAt|0, productType, tags, online 1|0, floorHeld]
+  // held = on hand minus available = units committed to open orders (on the shelf, but spoken for)
   // price = what Shopify POS rings up (ACTIVE products only); compareAt > 0 = on sale, compareAt is the full price
   const by = new Map();
   const rec = r => {
     const sku = String(r.sku || '').trim(); if (!sku) return null;
-    if (!by.has(sku)) { const pr = prices.get(sku); by.set(sku, [sku, r.name || '', r.brand || '', r.barcode || '', r.parent || sku, 0, [], pr ? pr.p : null, pr ? pr.c : 0, pr ? pr.t : '', pr ? pr.g : '', pr ? pr.o : 0]); }
+    if (!by.has(sku)) { const pr = prices.get(sku); by.set(sku, [sku, r.name || '', r.brand || '', r.barcode || '', r.parent || sku, 0, [], pr ? pr.p : null, pr ? pr.c : 0, pr ? pr.t : '', pr ? pr.g : '', pr ? pr.o : 0, 0]); }
     return by.get(sku);
   };
-  for (const r of bins)  { const it = rec(r); if (!it) continue; const a = Number(r.avail) || 0; if (a > 0) it[6].push([r.bin, a]); }
-  for (const r of floor) { const it = rec(r); if (!it) continue; it[5] = Number(r.floor) || 0; }
-  // drop SKUs that ended up with nothing available anywhere (all bin stock committed)
-  const items = [...by.values()].filter(it => it[6].length || it[5] > 0).sort((a, b) => a[0].localeCompare(b[0]));
+  for (const r of bins)  { const it = rec(r); if (!it) continue; const a = Number(r.avail) || 0, oh = Number(r.onhand) || 0; if (a > 0 || oh > 0) it[6].push([r.bin, a, Math.max(0, oh - a)]); }
+  for (const r of floor) { const it = rec(r); if (!it) continue; it[5] = Number(r.floor) || 0; it[12] = Math.max(0, (Number(r.flooroh) || 0) - it[5]); }
+  // keep SKUs with anything on hand anywhere — fully-held stock still shows, flagged as held
+  const items = [...by.values()].filter(it => it[6].length || it[5] > 0 || it[12] > 0).sort((a, b) => a[0].localeCompare(b[0]));
 
-  const units = items.reduce((a, it) => a + it[6].reduce((x, b) => x + b[1], 0), 0);
+  const units = items.reduce((a, it) => a + it[6].reduce((x, b) => x + b[1], 0), 0), held = items.reduce((a, it) => a + it[6].reduce((x, b) => x + (b[2] || 0), 0) + (it[12] || 0), 0);
   const binRows = items.reduce((a, it) => a + it[6].length, 0);
   const priced = items.filter(it => it[7] != null).length, onSale = items.filter(it => it[8]).length, online = items.filter(it => it[11]).length;
-  const seed = { asOf: melbourneNow(), counts: { skus: items.length, binRows, units, floorSkus: floor.length, priced, onSale, online }, items };
+  const seed = { asOf: melbourneNow(), counts: { skus: items.length, binRows, units, held, floorSkus: floor.length, priced, onSale, online }, items };
 
   // plain JSON (not a JS file) so the browser can fetch + cache it and store it locally
   fs.writeFileSync(SEED_PATH, JSON.stringify(seed) + '\n');
   fs.writeFileSync(META_PATH, JSON.stringify({ asOf: seed.asOf, ...seed.counts }) + '\n');
-  console.log(`stock-fetch OK: ${items.length} SKUs, ${binRows} bin rows, ${units} units avail in bins, ${floor.length} floor SKUs · prices: ${priceNote}, ${priced} in-stock SKUs priced, ${onSale} on sale, ${online} online · ${((Date.now() - t0) / 1000).toFixed(1)}s · ${(fs.statSync(SEED_PATH).size / 1024).toFixed(0)} KB`);
+  console.log(`stock-fetch OK: ${items.length} SKUs, ${binRows} bin rows, ${units} units avail in bins, ${floor.length} floor SKUs · prices: ${priceNote}, ${priced} in-stock SKUs priced, ${onSale} on sale, ${online} online · ${held} units held · ${((Date.now() - t0) / 1000).toFixed(1)}s · ${(fs.statSync(SEED_PATH).size / 1024).toFixed(0)} KB`);
 }
 main().catch(e => { console.error('stock-fetch FAILED: ' + e.message); process.exit(1); });

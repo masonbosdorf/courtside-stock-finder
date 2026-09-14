@@ -72,4 +72,8 @@ node stock-fetch.js            # uses ~/.config/fulfilment-sync/credentials.json
 | `Adidas - womens shorts M` | kinds and sizes together: flat list of that brand's womens shorts in M |
 | `Kobe 8 - 44` / `Sabrina 4 - 46` / `Jordan - eu44` | EU sizes (35–53) are converted **per style** to the US size the SKU carries: Womens-tagged styles use womens US (Sabrina 4 EU 46 → 13.5), Youth/Kids use Y sizes, everything else mens; brand charts for Nike/Jordan/Li-Ning/WoW, Adidas/Reebok, New Balance, Puma, Converse. The EU shows in gold under the size and the conversion used shows in the result line. Roman numerals in names count as digits (KOBE VIII = Kobe 8) |
 | `FW - 16` / `APP - L` / `ACC - M` / `OFFLINE FW` / `online app - L` / `Nike - offline shoes 10` | class words (FW/footwear, APP/apparel, ACC/accessories, from the Shopify tags) and online words (ON/ONLINE = live on the web store, OFF/OFFLINE = not) work on either side of the dash or on their own; with no brand they cover every brand |
+| `Nike - binned` / `offline - binned` / `Jordan - floor` | `binned` = has available stock in a warehouse bin, `floor` = available on the sales floor; both work on either side of the dash or alone, and in flat (sized) lists they filter per SKU |
 | `Sabrina 4 - m10` / `Kobe 8 - w11.5` / `Nike - mens 10` | a US size on a stated scale, converted to each shoe's own scale using the brand's mens↔womens offset (Nike 1.5, Adidas 1, NB/Puma 1.5, Converse 2): Sabrina is womens so m10 → 11.5; Kobe is mens so w11.5 → 10. Shown as "= M 10" under the size |
+
+
+**Held units:** bin chips and totals show available units; a gold "+N held" flag beside the count means units are physically there but committed to open orders (seed: `[bin, avail, held]`, `items[12]` = floor held).
