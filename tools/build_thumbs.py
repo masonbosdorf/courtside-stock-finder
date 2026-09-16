@@ -542,6 +542,15 @@ def main(argv=None):
             "--all" if args.all else "in-stock",
         )
         print(f"report: {args.report}")
+
+    # The style index: every picture we hold, as the bare style code. SWISH's PO Receiving
+    # has no parent/style field on a line, so it matches a SKU to its picture by longest
+    # prefix against this list. Written next to index.html so Pages serves it beside the
+    # tiles; ~70 KB gzipped, fetched once per device and cached.
+    index_path = out_dir.parent / "img-index.json"
+    styles = sorted(p.stem for p in out_dir.glob("*.webp"))
+    index_path.write_text(json.dumps(styles, separators=(",", ":")))
+    print(f"style index: {len(styles)} names → {index_path}")
     return 0
 
 
