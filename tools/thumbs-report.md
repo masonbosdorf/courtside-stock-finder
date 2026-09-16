@@ -8,52 +8,52 @@ Filename rule: `parent.replace(/[^A-Za-z0-9._-]/g, "_") + ".webp"` in `img/`.
 
 | Brand | Styles | With thumb | % |
 |---|---:|---:|---:|
-| NIKE | 690 | 668 | 97% |
-| JORDAN | 468 | 456 | 97% |
-| NEW ERA | 394 | 299 | 76% |
-| ADIDAS | 191 | 187 | 98% |
+| NIKE | 687 | 676 | 98% |
+| JORDAN | 466 | 454 | 97% |
+| NEW ERA | 394 | 306 | 78% |
+| ADIDAS | 191 | 191 | 100% |
 | VOUSETI | 99 | 96 | 97% |
 | FRANK GREEN | 78 | 39 | 50% |
 | FIRST EVER | 73 | 73 | 100% |
-| NEW BALANCE | 64 | 55 | 86% |
-| OUTERSTUFF | 58 | 18 | 31% |
-| PUMA | 57 | 55 | 96% |
-| WAY OF WADE | 56 | 48 | 86% |
-| MITCHELL & NESS | 48 | 42 | 88% |
+| NEW BALANCE | 64 | 63 | 98% |
+| OUTERSTUFF | 58 | 54 | 93% |
+| PUMA | 57 | 57 | 100% |
+| WAY OF WADE | 52 | 44 | 85% |
 | CROCS | 47 | 47 | 100% |
-| RYOKO RAIN | 47 | 45 | 96% |
-| LI-NING | 42 | 41 | 98% |
+| MITCHELL & NESS | 47 | 42 | 89% |
+| RYOKO RAIN | 46 | 44 | 96% |
+| LI-NING | 42 | 42 | 100% |
 | CONVERSE | 38 | 38 | 100% |
 | STANCE | 24 | 24 | 100% |
 | GLOBETROTTERS | 22 | 22 | 100% |
-| SPALDING | 22 | 20 | 91% |
+| SPALDING | 22 | 21 | 95% |
 | SNEAKER LAB | 15 | 15 | 100% |
-| MELIN | 14 | 2 | 14% |
-| BUCKETSQUAD | 9 | 9 | 100% |
+| MELIN | 14 | 13 | 93% |
+| BUCKETSQUAD | 8 | 8 | 100% |
 | WILSON | 7 | 6 | 86% |
-| **TOTAL** | **2563** | **2305** | **89.9%** |
+| **TOTAL** | **2551** | **2375** | **93.1%** |
 
 ## img/ directory
 
-- files: **18665**
-- size: **32.3 MB**
+- files: **18985**
+- size: **32.9 MB**
 - average thumb: **1.77 KB**
 
 ## How the in-stock hero was found
 
-- `hero`: 1156
-- `style/colour`: 1100
+- `hero`: 1219
+- `style/colour`: 1121
 - `hero-norm`: 25
-- `folder`: 24
+- `folder`: 10
 
 ## Nike / Jordan view code used (in-stock)
 
 | View code | Count |
 |---|---:|
-| PHSLH000 | 486 |
+| PHSLH000 | 483 |
 | PHSFM001 | 453 |
-| PHSFH001 | 100 |
-| (non-AURORA file) | 47 |
+| PHSFH001 | 99 |
+| (non-AURORA file) | 57 |
 | PHCFH001 | 19 |
 | PHSBM001 | 7 |
 | PHSLH001 | 3 |
@@ -64,17 +64,15 @@ Filename rule: `parent.replace(/[^A-Za-z0-9._-]/g, "_") + ".webp"` in `img/`.
 | PHSYM003 | 1 |
 | PHSRH000 | 1 |
 
-## In-stock parents with no image (258)
+## In-stock parents with no image (176)
 
-Missing by brand: NEW ERA 95, OUTERSTUFF 40, FRANK GREEN 39, NIKE 22, MELIN 12, JORDAN 12, NEW BALANCE 9, WAY OF WADE 8, MITCHELL & NESS 6, ADIDAS 4, VOUSETI 3, PUMA 2, SPALDING 2, RYOKO RAIN 2, LI-NING 1, WILSON 1
+Missing by brand: NEW ERA 88, FRANK GREEN 39, JORDAN 12, NIKE 11, WAY OF WADE 8, MITCHELL & NESS 5, OUTERSTUFF 4, VOUSETI 3, RYOKO RAIN 2, SPALDING 1, MELIN 1, NEW BALANCE 1, WILSON 1
 
 First 20:
 
 | Parent | Brand | Reason |
 |---|---|---|
 | `14144828` | NEW ERA | no-image |
-| `31475101` | PUMA | no-image |
-| `6030/BV` | SPALDING | no-image |
 | `6055/NBL/MEL/2` | SPALDING | no-image |
 | `60684355` | NEW ERA | no-image |
 | `60760731` | NEW ERA | no-image |
@@ -92,6 +90,8 @@ First 20:
 | `60839723` | NEW ERA | no-image |
 | `60839726` | NEW ERA | no-image |
 | `60839727` | NEW ERA | no-image |
+| `60839728` | NEW ERA | no-image |
+| `60839732` | NEW ERA | no-image |
 
 ## Errors (1)
 
