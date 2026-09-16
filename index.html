@@ -89,6 +89,11 @@ html[data-device="desktop"] .ibtn.cam{display:none;}
 .search-meta .mode{color:var(--gold);}
 .search-meta kbd{font:inherit;border:1px solid var(--line-2);border-radius:4px;padding:1px 5px;color:var(--muted);}
 html[data-device="phone"] .search-meta #hint{display:none;}
+/* Export the whole current search to .xlsx (export-xlsx.js) */
+.search-meta #meta,.search-meta #hint{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.xbtn{flex:0 0 auto;margin-left:auto;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:7px 13px;color:var(--muted);font:inherit;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;white-space:nowrap;transition:color .12s,border-color .12s,background .12s;}
+.xbtn:hover{color:var(--up);border-color:rgba(70,224,138,0.45);background:rgba(70,224,138,0.08);}
+.xbtn[disabled]{opacity:0.5;pointer-events:none;}
 
 /* ===== results ===== */
 .results{display:grid;grid-template-columns:1fr;gap:12px;align-items:start;}
@@ -347,7 +352,7 @@ html[data-device="phone"] .foot-in .mid{display:none;}
       <button class="ibtn clr" id="clr" aria-label="Clear search">×</button>
       <button class="ibtn cam" id="cam" aria-label="Scan a barcode with the camera" title="Scan barcode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8M10 8v8M13 8v8M17 8v8"/></svg></button>
     </label>
-    <div class="search-meta"><span id="meta">—</span><span id="hint"></span></div>
+    <div class="search-meta"><span id="meta">—</span><span id="hint"></span><button class="xbtn" id="xbtn" hidden>Export</button></div>
   </div>
 
   <main class="results" id="results" aria-live="polite"><div class="loading">Loading stock…</div></main>
@@ -379,6 +384,7 @@ html[data-device="phone"] .foot-in .mid{display:none;}
   <div class="ctl"><button id="scan-torch" hidden>Torch</button><button id="scan-flip">Flip camera</button></div>
 </div>
 
+<script src="export-xlsx.js"></script>
 <script>
 /* ============================================================================
    CourtSide Stock Finder — app
@@ -944,6 +950,34 @@ const input = $('q');
 let t; input.addEventListener('input', () => { LIMIT = 20; clearTimeout(t); t = setTimeout(render, 60); });
 input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); render(); } });
 $('clr').addEventListener('click', () => { input.value = ''; LIMIT = 20; render(); input.focus(); });
+
+/* ---------- Export: the whole current search → .xlsx (Variants + Parents sheets) ----------
+   The button reports the row count so it's obvious it exports everything, not the rendered page. */
+const xbtn = $('xbtn');
+function paintExport() {
+  if (!xbtn || !S) return;
+  const n = SFExport.rowsFor(search(input.value), { nice, BY_SKU }).length;
+  xbtn.hidden = !n;
+  xbtn.disabled = !n || xbtn.dataset.busy === '1';
+  if (n && xbtn.dataset.busy !== '1') xbtn.textContent = `Export ${n} SKU${n === 1 ? '' : 's'}`;
+}
+const renderOnly = render;                      // paint the button after every render, without touching render()
+render = function () { renderOnly.apply(this, arguments); paintExport(); };
+xbtn.addEventListener('click', async () => {
+  const q = input.value, r = search(q);
+  if (!SFExport.rowsFor(r, { nice, BY_SKU }).length) return;
+  xbtn.dataset.busy = '1'; xbtn.disabled = true;
+  try {
+    const out = await SFExport.run({ result: r, query: q, asOf: S && S.asOf, nice, BY_SKU,
+      onProgress: (phase, done, total) => { xbtn.textContent = phase === 'images' ? `Images ${done}/${total}` : 'Building…'; } });
+    const sheets = out.sheets.map(s => `${s.rows} ${s.name.toLowerCase()}`).join(' · ');
+    flash(`Exported ${sheets}${out.imagesSkipped ? ' · no images over ' + SFExport.MAX_IMAGES + ' rows' : ''}`);
+  } catch (e) {
+    flash('Export failed — ' + (e && e.message ? e.message : e));
+  } finally {
+    xbtn.dataset.busy = ''; paintExport();
+  }
+});
 $('results').addEventListener('click', e => {
   const b = e.target.closest('.bin'); if (b) { addPick(b.dataset.sku, b.dataset.bin, +b.dataset.avail); return; }
   const tr = e.target.closest('.card.binview tbody tr[data-sku]'); if (tr) { addPick(tr.dataset.sku, tr.dataset.bin, +tr.dataset.avail); return; }
