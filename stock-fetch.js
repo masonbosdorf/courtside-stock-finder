@@ -6,7 +6,7 @@
    loc-2 bins the stock left from with a qty each (item[14] = [[bin, qty]…]), read off SWISH's send
    transfers: SND-… (one per WHS tote, apparel + accessories) and SNF-… (footwear, the boxes stay on
    their shelves). The moved qty is shared out over loc 27's on hand, so sales take it down. item[15] =
-   the WH Sale price (the product's WHS26-* tag → whsale-prices.json, never above the POS price), so the
+   the WH Sale price (size price / WHS26-* tag price / % off RRP from whsale-prices.json, never above the POS price), so the
    page can flag sale stock with what it rings up at. All non-fatal and empty outside the sale.
    Plus the Shopify POS price per SKU (shopify-prices.js): price + compare-at (full price when on
    sale). If Shopify fails, prices are carried over from the previous seed so a hiccup never blanks
@@ -80,10 +80,24 @@ async function saleBins() {
   return out;
 }
 
-/* WHS26-* tag → WH Sale price (a copy of the wh-sale-pricing discount's config) */
+/* WH Sale price rules (a copy of the wh-sale-pricing discount's config): prices = WHS26-* tag → $,
+   percentOff = tag → % off RRP (compare-at when marked down, else price), skuPrices = one size → $ */
 function loadSalePrices() {
-  try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'whsale-prices.json'), 'utf8')).prices || {}; }
-  catch (e) { console.error('whsale-prices.json unreadable: ' + e.message); return {}; }
+  try { const j = JSON.parse(fs.readFileSync(path.join(__dirname, 'whsale-prices.json'), 'utf8')); return { prices: j.prices || {}, percentOff: j.percentOff || {}, skuPrices: j.skuPrices || {} }; }
+  catch (e) { console.error('whsale-prices.json unreadable: ' + e.message); return { prices: {}, percentOff: {}, skuPrices: {} }; }
+}
+
+/* what the WHSALE-NOV26 code rings a SKU up at: the lowest of its size price, tag price and % off,
+   never above the POS price — the same rule as the discount function. null = not in the sale */
+function salePrice(ws, sku, pr) {
+  const c = [ws.skuPrices[sku.toUpperCase()]];
+  if (pr && pr.w) {
+    c.push(ws.prices[pr.w]);
+    if (ws.percentOff[pr.w] != null) c.push(Math.round(Math.max(pr.p, pr.c || 0) * (100 - ws.percentOff[pr.w])) / 100);
+  }
+  const ok = c.map(Number).filter(v => isFinite(v) && v >= 0);
+  if (!ok.length) return null;
+  return pr && pr.p != null ? Math.min(pr.p, ...ok) : Math.min(...ok);
 }
 
 // sanity floors — a pull far below these means NetSuite returned a partial result
@@ -141,7 +155,7 @@ async function main() {
     let left = it[13] = Number(r.sale) || 0;
     const b = sBins.get(it[0].toUpperCase());
     if (b && b.size) it[14] = [...b].sort((x, y) => x[0].localeCompare(y[0], 'en', { numeric: true })).map(([bin, q]) => { const n = Math.max(0, Math.min(q, left)); left -= n; return [bin, n]; });
-    const pr = prices.get(it[0]), tp = !pr ? null : pr.ws != null ? pr.ws : pr.w ? wsPrices[pr.w] : null;
+    const pr = prices.get(it[0]), tp = pr && pr.ws != null ? pr.ws : salePrice(wsPrices, it[0], pr);
     if (tp != null) it[15] = it[7] != null ? Math.min(Number(tp), it[7]) : Number(tp);
   }
   // keep SKUs with anything on hand anywhere — fully-held stock still shows, flagged as held
