@@ -1,6 +1,6 @@
 /* shopify-prices.js — the price a SKU rings up at on Shopify POS.
    Pulls every product variant (sku, price, compareAtPrice, product status) via the Admin API and
-   returns Map<sku, { p: price, c: compareAtPrice|0, t: productType, g: tags, o: 1|0 online }> (o = ACTIVE and published to the
+   returns Map<sku, { p: price, c: compareAtPrice|0, t: productType, g: tags, o: 1|0 online, w: WHS26-* sale tag|'' }> (o = ACTIVE and published to the
    Online Store — `onlineStoreUrl` is only set when the product is live on that channel) (g = the audience/category
    tags the search uses: Mens Womens Unisex Youth Kids Toddler Boys Girls APPAREL FOOTWEAR ACCESSORIES …). Only ACTIVE products are sellable at POS —
    DRAFT/ARCHIVED variants are skipped so the page shows "not on POS" instead of a dead price.
@@ -35,7 +35,7 @@ async function fetchPrices() {
       const p = Number(v.price), c = v.compareAtPrice != null ? Number(v.compareAtPrice) : 0;
       if (!isFinite(p)) continue;
       // duplicate SKUs across variants: keep the first ACTIVE one seen
-      if (!out.has(sku)) out.set(sku, { p, c: c > p ? c : 0, t: (v.product && v.product.productType) || '', g: ((v.product && v.product.tags) || []).filter(x => KEEP_TAGS.has(x)).join(' '), o: (v.product && (v.product.onlineStoreUrl || v.product.publishedAt)) ? 1 : 0 });
+      if (!out.has(sku)) out.set(sku, { p, c: c > p ? c : 0, t: (v.product && v.product.productType) || '', g: ((v.product && v.product.tags) || []).filter(x => KEEP_TAGS.has(x)).join(' '), o: (v.product && (v.product.onlineStoreUrl || v.product.publishedAt)) ? 1 : 0, w: ((v.product && v.product.tags) || []).find(x => /^WHS26-/.test(x)) || '' });
     }
     pages++;
     if (!pv.pageInfo.hasNextPage) break;

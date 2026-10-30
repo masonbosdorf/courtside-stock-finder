@@ -3,8 +3,11 @@
      A. Loc-2 warehouse bins with stock (active bins only), per SKU per bin, AVAILABLE qty
      B. Loc-22 sales floor (non-bin) AVAILABLE qty per SKU
    Plus the Warehouse Sale (loc 27, no bins) on hand per SKU — item[13] — and, for those SKUs, the
-   loc-2 bins the footwear left from (item[14]), read off SWISH's "send footwear" transfers (external
-   id SNF-…), so moved shoes stay findable during the sale. Both non-fatal and empty outside the sale.
+   loc-2 bins the stock left from with a qty each (item[14] = [[bin, qty]…]), read off SWISH's send
+   transfers: SND-… (one per WHS tote, apparel + accessories) and SNF-… (footwear, the boxes stay on
+   their shelves). The moved qty is shared out over loc 27's on hand, so sales take it down. item[15] =
+   the WH Sale price (the product's WHS26-* tag → whsale-prices.json, never above the POS price), so the
+   page can flag sale stock with what it rings up at. All non-fatal and empty outside the sale.
    Plus the Shopify POS price per SKU (shopify-prices.js): price + compare-at (full price when on
    sale). If Shopify fails, prices are carried over from the previous seed so a hiccup never blanks
    them. Merged by SKU and written to stock-seed.json + stock-meta.json (asOf only, what the browser polls). Non-fatal by design: on any fetch error, or an implausibly small
@@ -50,19 +53,19 @@ const Q_SALE = `
   JOIN item i ON i.id = ail.item
   WHERE ail.location = 27 AND ail.quantityonhand > 0
   ORDER BY ail.item`;
-const SNF = `t.recordtype = 'inventorytransfer' AND t.externalid LIKE 'SNF-%'`;
+const SNF = `t.recordtype = 'inventorytransfer' AND (t.externalid LIKE 'SNF-%' OR t.externalid LIKE 'SND-%')`;
 const Q_SNF_LINES = `
   SELECT tl.transaction AS tid, tl.id AS lid, i.itemid AS sku
   FROM transactionline tl JOIN transaction t ON t.id = tl.transaction JOIN item i ON i.id = tl.item
   WHERE ${SNF} AND tl.mainline = 'F'
   ORDER BY tl.transaction, tl.id`;
 const Q_SNF_BINS = `
-  SELECT ia.id AS iaid, ia.transaction AS tid, ia.transactionline AS lid, BUILTIN.DF(ia.bin) AS bin
+  SELECT ia.id AS iaid, ia.transaction AS tid, ia.transactionline AS lid, BUILTIN.DF(ia.bin) AS bin, ia.quantity AS qty
   FROM inventoryassignment ia JOIN transaction t ON t.id = ia.transaction
   WHERE ${SNF} AND ia.bin IS NOT NULL
   ORDER BY ia.id`;
 
-/* SKU → the bins its Warehouse Sale move came out of */
+/* SKU → Map(bin → units its Warehouse Sale moves took out of that bin) */
 async function saleBins() {
   const lines = await suiteqlAll(Q_SNF_LINES);
   if (!lines.length) return new Map();
@@ -71,10 +74,16 @@ async function saleBins() {
   for (const a of await suiteqlAll(Q_SNF_BINS)) {
     const sku = skuOf.get(`${a.tid}:${a.lid}`), bin = String(a.bin || '').trim();
     if (!sku || !bin) continue;
-    if (!out.has(sku)) out.set(sku, new Set());
-    out.get(sku).add(bin);
+    if (!out.has(sku)) out.set(sku, new Map());
+    const m = out.get(sku); m.set(bin, (m.get(bin) || 0) + Math.abs(Number(a.qty) || 0));
   }
   return out;
+}
+
+/* WHS26-* tag → WH Sale price (a copy of the wh-sale-pricing discount's config) */
+function loadSalePrices() {
+  try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'whsale-prices.json'), 'utf8')).prices || {}; }
+  catch (e) { console.error('whsale-prices.json unreadable: ' + e.message); return {}; }
 }
 
 // sanity floors — a pull far below these means NetSuite returned a partial result
@@ -109,11 +118,11 @@ async function main() {
   catch (e) {
     console.error('shopify prices FAILED (carrying over previous): ' + e.message);
     prices = new Map();
-    try { for (const it of JSON.parse(fs.readFileSync(SEED_PATH, 'utf8')).items) if (it[7] != null) prices.set(it[0], { p: it[7], c: it[8] || 0, t: it[9] || '', g: it[10] || '', o: it[11] || 0 }); } catch (e2) {}
+    try { for (const it of JSON.parse(fs.readFileSync(SEED_PATH, 'utf8')).items) if (it[7] != null) prices.set(it[0], { p: it[7], c: it[8] || 0, t: it[9] || '', g: it[10] || '', o: it[11] || 0, ws: it[15] ?? null }); } catch (e2) {}
     priceNote = `${prices.size} carried over`;
   }
 
-  // item record: [sku, name, brand, barcode, parent(style-colour), floorAvail, [[bin, avail, held], ...], price|null, compareAt|0, productType, tags, online 1|0, floorHeld, whSale?, [saleBin…]?]
+  // item record: [sku, name, brand, barcode, parent(style-colour), floorAvail, [[bin, avail, held], ...], price|null, compareAt|0, productType, tags, online 1|0, floorHeld, whSale?, [[saleBin, qty]…]?, whSalePrice?]
   // held = on hand minus available = units committed to open orders (on the shelf, but spoken for)
   // price = what Shopify POS rings up (ACTIVE products only); compareAt > 0 = on sale, compareAt is the full price
   const by = new Map();
@@ -124,8 +133,17 @@ async function main() {
   };
   for (const r of bins)  { const it = rec(r); if (!it) continue; const a = Number(r.avail) || 0, oh = Number(r.onhand) || 0; if (a > 0 || oh > 0) it[6].push([r.bin, a, Math.max(0, oh - a)]); }
   for (const r of floor) { const it = rec(r); if (!it) continue; it[5] = Number(r.floor) || 0; it[12] = Math.max(0, (Number(r.flooroh) || 0) - it[5]); }
-  // whSale = on hand at the Warehouse Sale (loc 27); saleBins = where those boxes physically sit
-  for (const r of sale) { const it = rec(r); if (!it) continue; it[13] = Number(r.sale) || 0; const b = sBins.get(it[0].toUpperCase()); if (b && b.size) it[14] = [...b].sort(); }
+  // whSale = on hand at the Warehouse Sale (loc 27); saleBins = where it physically sits — the moved qty per
+  // bin, shared out over what's still on hand in bin order (sales take it down); salePrice = the WH Sale price
+  const wsPrices = loadSalePrices();
+  for (const r of sale) {
+    const it = rec(r); if (!it) continue;
+    let left = it[13] = Number(r.sale) || 0;
+    const b = sBins.get(it[0].toUpperCase());
+    if (b && b.size) it[14] = [...b].sort((x, y) => x[0].localeCompare(y[0], 'en', { numeric: true })).map(([bin, q]) => { const n = Math.max(0, Math.min(q, left)); left -= n; return [bin, n]; });
+    const pr = prices.get(it[0]), tp = !pr ? null : pr.ws != null ? pr.ws : pr.w ? wsPrices[pr.w] : null;
+    if (tp != null) it[15] = it[7] != null ? Math.min(Number(tp), it[7]) : Number(tp);
+  }
   // keep SKUs with anything on hand anywhere — fully-held stock still shows, flagged as held
   const items = [...by.values()].filter(it => it[6].length || it[5] > 0 || it[12] > 0 || it[13] > 0).sort((a, b) => a[0].localeCompare(b[0]));
 

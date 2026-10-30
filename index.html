@@ -189,15 +189,23 @@ html[data-device="desktop"] .empty .cta{display:none;}
 .bin{position:relative;}
 .bin .pk{position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--gold);color:#111;font-family:"Space Grotesk",sans-serif;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1;}
 .bin.in{border-color:rgba(255,214,107,0.6);}
-/* Warehouse Sale: shoes moved to loc 27 — the boxes still sit in their old bins (dashed) */
-.ws,.wsb{display:inline-flex;align-items:center;gap:8px;min-height:calc(var(--chip) - 12px);font-family:"Archivo Black",sans-serif;font-size:14px;letter-spacing:0.02em;border-radius:8px;padding:5px 10px;line-height:1;}
-.ws{background:#f4f4f4;color:#111;border:1px solid #f4f4f4;font-size:12px;letter-spacing:0.08em;}
-.ws .q{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:12px;color:#111;}
-.wsb{background:none;color:var(--muted);border:1px dashed rgba(255,255,255,0.35);}
-.tot .ws-t .v{color:#f4f4f4;}
+/* Warehouse Sale (loc 27, no bins): the stock shows in the bin / WHS tote it sits in, like any bin chip
+   (but not pickable — it's sold at the sale), and its SKU row is outlined red with the WH Sale price */
+:root{--ws:#ff3b30;}
+.sbin{display:inline-flex;align-items:center;gap:8px;min-height:calc(var(--chip) - 12px);font-family:"Archivo Black",sans-serif;font-size:14px;letter-spacing:0.02em;color:var(--signal);background:rgba(255,59,48,0.10);border:1px solid rgba(255,59,48,0.55);border-radius:8px;padding:5px 10px;line-height:1;}
+.sbin .q{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:12px;color:var(--ws);}
+.wstag{display:inline-flex;align-items:center;gap:6px;background:var(--ws);color:#fff;border-radius:6px;padding:3px 7px;font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;white-space:nowrap;line-height:1.1;}
+.wstag b{font-family:"Archivo Black",sans-serif;font-weight:400;font-size:13px;letter-spacing:0;}
+.wstag.nop{background:none;color:var(--ws);border:1px dashed var(--ws);}
+tbody tr.wsr td{background:rgba(255,59,48,0.06);border-top:1px solid rgba(255,59,48,0.55);border-bottom:1px solid rgba(255,59,48,0.55);}
+tbody tr.wsr td:first-child{box-shadow:inset 3px 0 0 var(--ws);}
+tbody tr.wsr td:last-child{box-shadow:inset -1px 0 0 rgba(255,59,48,0.55);}
+tbody tr.wsr td.size .wstag{margin-top:5px;}
+.card.wsc{border-color:rgba(255,59,48,0.55);}
+.card-h .wsprice{margin-top:8px;}
+.tot .ws-t .v{color:var(--ws);}
 .wsnote{font-size:10.5px;color:var(--faint);letter-spacing:0.04em;padding:6px clamp(14px,3vw,20px) 10px;}
-.wsnote b{color:#f4f4f4;font-weight:700;}
-td.qty .ws{font-size:10px;padding:3px 6px;margin-top:3px;}
+.wsnote b{color:var(--ws);font-weight:700;}
 .card.binview tbody tr{cursor:pointer;} .card.binview td.add{width:1%;color:var(--up);font-size:20px;font-weight:700;text-align:right;}
 /* ===== pick pill + sheet ===== */
 .pickpill{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(58px + env(safe-area-inset-bottom));z-index:25;background:var(--gold);color:#111;border-radius:999px;padding:12px 20px;font-weight:700;font-size:14px;letter-spacing:0.02em;box-shadow:0 10px 30px rgba(0,0,0,0.5);display:flex;align-items:center;gap:10px;white-space:nowrap;}
@@ -481,7 +489,7 @@ function sizeKey(s) {
 const cmpSize = (a, b) => { const A = sizeKey(a), B = sizeKey(b); return A[0] - B[0] || A[1] - B[1] || A[2].localeCompare(B[2]); };
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const nice = s => String(s || '').toLowerCase().replace(/\b(\w)/g, c => c.toUpperCase()).replace(/\bDri-Fit\b/gi, 'Dri-FIT').replace(/'(\w)/g, (m, c) => "'" + c.toUpperCase()).replace(/\b(Nba|Wnba|Nfl|Mlb|Nhl|Ncaa|Usa|La|Ny|Ii|Iii|Iv|Xl|Gs|Ps|Td)\b/g, m => m.toUpperCase());
-const BIN_RE = /^[A-Z]{1,4}-\d{2,3}(-\d{2}(-\d{3})?)?$/i;   // A-041 / A-041-03 / A-041-03-011
+const BIN_RE = /^([A-Z]{1,4}-\d{2,3}(-\d{2}(-\d{3})?)?|WHS-(MISC|FOOTWEAR)|LEBRON)$/i;   // A-041 / A-041-03 / A-041-03-011 · WH Sale WHS-MISC / WHS-FOOTWEAR / LEBRON
 /* words: lower-case, split on anything that isn't a letter/digit/dot, dots kept only inside numbers (10.5)
    so "G.T. CUT 3" → gt, cut, 3 and "HF2881-303-10" → hf2881, 303, 10 */
 const ROMAN = { i: '1', ii: '2', iii: '3', iv: '4', v: '5', vi: '6', vii: '7', viii: '8', ix: '9', x: '10', xi: '11', xii: '12', xiii: '13', xiv: '14', xv: '15', xvi: '16', xvii: '17', xviii: '18', xix: '19', xx: '20', xxi: '21', xxii: '22', xxiii: '23' };
@@ -509,8 +517,8 @@ function buildIndex() {
     const p = byParent.get(parent);
     const wh = bins.reduce((a, b) => a + b[1], 0);
     const heldB = bins.reduce((a, b) => a + (b[2] || 0), 0), heldF = it[12] || 0;
-    const sale = it[13] || 0, saleBins = sale ? (it[14] || []) : [];
-    p.sizes.push({ sku, size: sizeOf(sku, parent), bc, floor, bins, wh, price: it[7] ?? null, cmp: it[8] || 0, heldB, heldF, sale, saleBins });
+    const sale = it[13] || 0, saleBins = sale ? saleBinsOf(it) : [], wsp = sale ? (it[15] ?? null) : null;
+    p.sizes.push({ sku, size: sizeOf(sku, parent), bc, floor, bins, wh, price: it[7] ?? null, cmp: it[8] || 0, heldB, heldF, sale, saleBins, wsp });
     p.sale = (p.sale || 0) + sale;
     p.held = (p.held || 0) + heldB + heldF; if (bins.some(b => b[1] > 0)) p.binned = true; if (floor > 0) p.floored = true;
     if (!p.type && it[9]) p.type = it[9];
@@ -529,7 +537,7 @@ function buildIndex() {
     // word index: name words (what people type for a model) vs everything incl. codes/barcodes/bins
     p.nw = WORDS(p.name + ' ' + p.brand + ' ' + p.parent);
     p.kw = WORDS((p.type || '') + ' ' + (p.tags || ''));   // kind words: Shopify product type + audience/category tags
-    p.aw = p.nw.concat(WORDS(p.sizes.map(s => s.sku + ' ' + s.bc + ' ' + s.bins.map(b => b[0]).join(' ') + ' ' + s.saleBins.join(' ')).join(' ')));
+    p.aw = p.nw.concat(WORDS(p.sizes.map(s => s.sku + ' ' + s.bc + ' ' + s.bins.map(b => b[0]).join(' ') + ' ' + s.saleBins.map(b => b[0]).join(' ')).join(' ')));
   }
   STYLES = [...byParent.values()]; BY_PARENT = byParent;
   BRANDS = [...new Set(ITEMS.map(i => i[2]).filter(Boolean))].sort();
@@ -700,10 +708,10 @@ function search(q) {
         if (!bins.has(bin)) bins.set(bin, { bin, rows: [], units: 0, held: 0 });
         const b = bins.get(bin); b.rows.push({ p, s, av, hd: hd || 0 }); b.units += av; b.held += (hd || 0);
       }
-    for (const p of STYLES) for (const s of p.sizes) for (const bin of s.saleBins)
+    for (const p of STYLES) for (const s of p.sizes) for (const [bin, n] of s.saleBins)
       if (bin === pre || bin.startsWith(pre + '-')) {
         if (!bins.has(bin)) bins.set(bin, { bin, rows: [], units: 0, held: 0 });
-        const b = bins.get(bin); b.rows.push({ p, s, av: 0, hd: 0, ws: s.sale }); b.sale = (b.sale || 0) + s.sale;
+        const b = bins.get(bin); b.rows.push({ p, s, av: 0, hd: 0, ws: n }); b.sale = (b.sale || 0) + n;
       }
     if (bins.size) return { mode: 'bin', bins: [...bins.values()].sort((a, b) => a.bin.localeCompare(b.bin)) };
   }
@@ -737,6 +745,12 @@ function priceHTML(pr) {
   return `<div class="price"><span class="now">${money(pr.price)}</span></div>`;
 }
 const rowPrice = (price, cmp) => price == null ? `<span class="pr np">not on POS</span>` : cmp ? `<span class="pr sale">${money(price)} <s>${money(cmp)}</s> <span class="off">−${pct(price, cmp)}%</span></span>` : `<span class="pr">${money(price)}</span>`;
+/* card header: the style's WH Sale price (or range), with how many units are at the sale */
+function wsRange(p) {
+  const xs = p.sizes.filter(s => s.sale), ps = [...new Set(xs.map(s => s.wsp).filter(v => v != null))].sort((a, b) => a - b), n = xs.reduce((a, s) => a + s.sale, 0);
+  if (!ps.length) return wsTag(n, null);
+  return `<span class="wstag" title="Rings up at the WH Sale price with WHSALE-NOV26">WH Sale <b>${ps.length > 1 ? `${money(ps[0])}–${money(ps[ps.length - 1])}` : money(ps[0])}</b> · ${n} at the sale</span>`;
+}
 const light = on => `<span class="ol ${on ? 'on' : 'off'}" title="${on ? 'Online — live on the web store' : 'Not online — POS only or unpublished'}"></span>`;
 /* thumbnails: img/<parent with anything outside [A-Za-z0-9._-] → "_">.webp, lazy, placeholder on 404 */
 const thumbSrc = parent => 'img/' + String(parent).replace(/[^A-Za-z0-9._-]/g, '_') + '.webp';
@@ -879,22 +893,26 @@ let LIMIT = 20;
 const CAM_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8M10 8v8M13 8v8M17 8v8"/></svg>';
 const FLOOR = 'SALES FLOOR';   // NetSuite location 22, shown as a source chip so a pick can run floor → bin too
 function binChip(bin, av, sku, held) { const n = pickQty(sku, bin); return `<button class="bin${n ? ' in' : ''}${bin === FLOOR ? ' floor' : ''}" data-bin="${esc(bin)}" data-sku="${esc(sku)}" data-avail="${av}" title="${av} available${held ? `, ${held} held for orders` : ''} · tap to add ${esc(sku)} from ${esc(bin)} to the pick">${bin === FLOOR ? 'FLOOR' : esc(bin)}<span class="q">${av}</span>${held ? `<span class="h">+${held} held</span>` : ''}${n ? `<span class="pk">×${n}</span>` : ''}</button>`; }
-/* Warehouse Sale chips: at loc 27 now, boxes still in these bins — not pickable */
-const saleChips = (n, bins) => n ? [`<span class="ws" title="${n} at the Warehouse Sale (location 27) — sell from the sale, not the warehouse">WH SALE<span class="q">${n}</span></span>`].concat((bins || []).map(b => `<span class="wsb" title="Warehouse Sale stock — the box is still in ${esc(b)}">${esc(b)}</span>`)) : [];
-const WS_NOTE = `<div class="wsnote"><b>WH SALE</b> = moved to the Warehouse Sale · dashed bins = where the boxes still sit</div>`;
+/* Warehouse Sale: item[14] = [[bin, qty]…] (older seeds: bin names only) — shown as normal-looking bin
+   chips, red-edged and NOT pickable (no .bin class: it's at location 27 and sells at the sale) */
+function saleBinsOf(it) { return (it[14] || []).map(b => Array.isArray(b) ? [String(b[0]), b[1] ?? null] : [String(b), null]); }
+const saleChips = (n, bins) => !n ? [] : (bins && bins.length ? bins : [['WH SALE', n]]).map(([b, q]) => `<span class="sbin" title="Warehouse Sale stock in ${esc(b)} — sold at the Warehouse Sale (location 27), not pickable">${esc(b)}<span class="q">${q ?? ''}</span></span>`);
+const wsTag = (n, wsp) => n ? (wsp != null ? `<span class="wstag" title="Rings up at ${money(wsp)} at the Warehouse Sale (code WHSALE-NOV26)">WH Sale <b>${money(wsp)}</b></span>` : `<span class="wstag nop" title="No WHS26 tag on this product — it will ring up at full price at the sale">WH Sale · no price</span>`) : '';
+const WS_NOTE = `<div class="wsnote"><b>Red rows</b> = Warehouse Sale stock, in the bin / WHS tote shown · rings up at the WH Sale price with WHSALE-NOV26 · not pickable</div>`;
 function styleCard(p, hit) {
   const rows = p.sizes.map(s => {
     const chipsA = saleChips(s.sale, s.saleBins).concat(s.bins.filter(b => b[1] > 0 || b[2] > 0).map(b => binChip(b[0], b[1], s.sku, b[2] || 0))).concat((s.floor || s.heldF) ? [binChip(FLOOR, s.floor, s.sku, s.heldF)] : []);
     const bins = chipsA.length ? `<div class="stack">${chipsA.join('')}</div>` : `<span class="none">—</span>`;
     const rp = p.pricing.mixed ? `<td class="n rp ${s.price == null ? 'np' : s.cmp ? 'sale' : ''}">${s.price == null ? '—' : money(s.price)}${s.cmp ? `<s>${money(s.cmp)}</s><span class="off">−${pct(s.price, s.cmp)}%</span>` : ''}</td>` : '';
-    return `<tr class="${hit && s.sku === hit ? 'hl' : ''}"><td class="size">${esc(s.size)}</td><td class="bins">${bins}</td>${rp}<td class="n qty ${s.wh ? 'ok' : 'zero'}">${s.wh || '—'}${s.heldB ? `<span class="held">+${s.heldB} held</span>` : ''}</td><td class="n floor ${s.floor ? '' : 'zero'}">${s.floor || '—'}${s.heldF ? `<span class="held">+${s.heldF} held</span>` : ''}</td></tr>`;
+    return `<tr class="${[hit && s.sku === hit ? 'hl' : '', s.sale ? 'wsr' : ''].join(' ').trim()}"><td class="size">${esc(s.size)}${s.sale ? `<div>${wsTag(s.sale, s.wsp)}</div>` : ''}</td><td class="bins">${bins}</td>${rp}<td class="n qty ${s.wh ? 'ok' : 'zero'}">${s.wh || '—'}${s.heldB ? `<span class="held">+${s.heldB} held</span>` : ''}</td><td class="n floor ${s.floor ? '' : 'zero'}">${s.floor || '—'}${s.heldF ? `<span class="held">+${s.heldF} held</span>` : ''}</td></tr>`;
   }).join('');
   const rph = p.pricing.mixed ? '<th class="n">Price</th>' : '';
-  return `<section class="card${hit ? ' hit' : ''}">
+  return `<section class="card${hit ? ' hit' : ''}${p.sale ? ' wsc' : ''}">
     <div class="card-h">${thumb(p.parent)}<div class="who">
       <div class="eyebrow">${light(!!p.online)}<span>${esc(p.brand || '—')}</span><span class="code">${esc(p.parent)}</span></div>
       <h2>${esc(nice(p.name) || p.parent)}</h2>
       ${priceHTML(p.pricing)}
+      ${p.sale ? `<div class="wsprice">${wsRange(p)}</div>` : ''}
     </div>
     <div class="tot"><div class="${p.wh ? '' : 'zero'}"><div class="v">${p.wh}</div><div class="l">Warehouse</div>${p.sizes.reduce((a, s) => a + s.heldB, 0) ? `<div class="hd">+${p.sizes.reduce((a, s) => a + s.heldB, 0)} held</div>` : ''}</div><div class="${p.floor ? '' : 'zero'}"><div class="v">${p.floor}</div><div class="l">Floor</div>${p.sizes.reduce((a, s) => a + s.heldF, 0) ? `<div class="hd">+${p.sizes.reduce((a, s) => a + s.heldF, 0)} held</div>` : ''}</div>${p.sale ? `<div class="ws-t"><div class="v">${p.sale}</div><div class="l">WH Sale</div></div>` : ''}</div></div>
     <div style="overflow-x:auto"><table><thead><tr><th>Size</th><th>Bin · avail</th>${rph}<th class="n">Warehouse</th><th class="n">Floor</th></tr></thead><tbody>${rows}</tbody></table></div>
@@ -904,7 +922,7 @@ function styleCard(p, hit) {
 }
 function binCard(b) {
   const rows = b.rows.sort((x, y) => x.p.name.localeCompare(y.p.name) || cmpSize(x.s.size, y.s.size)).map(({ p, s, av, hd, ws }) => ws ?
-    `<tr class="wsrow"><td class="prod">${thumb(p.parent, true)}<div class="pt"><div class="nm">${esc(nice(p.name) || p.parent)}</div><div class="sk">${esc(p.brand || '—')} · ${esc(s.sku)} · ${rowPrice(s.price, s.cmp)}</div></div></td><td class="size">${esc(s.size)}</td><td class="n qty"><span class="ws">WH SALE<span class="q">${ws}</span></span></td><td class="add"></td></tr>` :
+    `<tr class="wsr"><td class="prod">${thumb(p.parent, true)}<div class="pt"><div class="nm">${esc(nice(p.name) || p.parent)}</div><div class="sk">${esc(p.brand || '—')} · ${esc(s.sku)} · ${rowPrice(s.price, s.cmp)}</div><div style="margin-top:4px">${wsTag(s.sale, s.wsp)}</div></div></td><td class="size">${esc(s.size)}</td><td class="n qty" style="color:var(--ws)">${ws}</td><td class="add"></td></tr>` :
     `<tr data-sku="${esc(s.sku)}" data-bin="${esc(b.bin)}" data-avail="${av}"><td class="prod">${thumb(p.parent, true)}<div class="pt"><div class="nm">${esc(nice(p.name) || p.parent)}</div><div class="sk">${light(!!p.online)} ${esc(p.brand || '—')} · ${esc(s.sku)} · ${rowPrice(s.price, s.cmp)}</div></div></td><td class="size">${esc(s.size)}</td><td class="n qty ${av ? 'ok' : 'zero'}">${av || '—'}${hd ? `<span class="held">+${hd} held</span>` : ''}</td><td class="add">${pickQty(s.sku, b.bin) ? '×' + pickQty(s.sku, b.bin) : '+'}</td></tr>`).join('');
   return `<section class="card binview">
     <div class="card-h"><div class="who"><div class="eyebrow"><span>Bin</span><span class="code">${b.rows.length} SKU${b.rows.length === 1 ? '' : 's'}</span></div><h2>${esc(b.bin)}</h2></div>
@@ -918,15 +936,16 @@ function flatCard(r) {
   const wh = r.rows.reduce((a, it) => a + it[6].reduce((x, b) => x + b[1], 0), 0), fl = r.rows.reduce((a, it) => a + it[5], 0);
   const rows = r.rows.slice(0, LIMIT).map(it => {
     const [sku, name, brand, bc, parent, floor, bins] = it, w = bins.reduce((a, b) => a + b[1], 0);
-    const chipsB = saleChips(it[13] || 0, it[14]).concat(bins.filter(b => b[1] > 0 || b[2] > 0).map(b => binChip(b[0], b[1], sku, b[2] || 0))).concat((floor || it[12]) ? [binChip(FLOOR, floor, sku, it[12] || 0)] : []);
+    const chipsB = saleChips(it[13] || 0, saleBinsOf(it)).concat(bins.filter(b => b[1] > 0 || b[2] > 0).map(b => binChip(b[0], b[1], sku, b[2] || 0))).concat((floor || it[12]) ? [binChip(FLOOR, floor, sku, it[12] || 0)] : []);
     const chips = chipsB.length ? `<div class="stack">${chipsB.join('')}</div>` : `<span class="none">—</span>`;
     const eu = r.euBySku && r.euBySku[sku];
-    return `<tr><td class="prod">${thumb(parent, true)}<div class="pt"><div class="nm">${esc(nice(name) || parent)}</div><div class="sk">${light(!!it[11])} ${esc(sku)}${r.brands.length > 1 ? ' · ' + esc(brand) : ''} · ${rowPrice(it[7] ?? null, it[8] || 0)}</div></div></td><td class="size">${esc(sizeOf(sku, parent))}${eu ? `<div class="eu">${esc(eu)}</div>` : ''}</td><td class="bins">${chips}</td><td class="n qty whcol ${w ? 'ok' : 'zero'}">${w || '—'}</td><td class="n floor ${floor ? '' : 'zero'}">${floor || '—'}</td></tr>`;
+    return `<tr${it[13] ? ' class="wsr"' : ''}><td class="prod">${thumb(parent, true)}<div class="pt"><div class="nm">${esc(nice(name) || parent)}</div><div class="sk">${light(!!it[11])} ${esc(sku)}${r.brands.length > 1 ? ' · ' + esc(brand) : ''} · ${rowPrice(it[7] ?? null, it[8] || 0)}</div>${it[13] ? `<div style="margin-top:4px">${wsTag(it[13], it[15] ?? null)}</div>` : ''}</div></td><td class="size">${esc(sizeOf(sku, parent))}${eu ? `<div class="eu">${esc(eu)}</div>` : ''}</td><td class="bins">${chips}</td><td class="n qty whcol ${w ? 'ok' : 'zero'}">${w || '—'}</td><td class="n floor ${floor ? '' : 'zero'}">${floor || '—'}</td></tr>`;
   }).join('');
   return `<section class="card flat">
     <div class="card-h"><div class="who"><div class="eyebrow"><span>${esc(label)}</span><span class="code">${r.rows.length} SKU${r.rows.length === 1 ? '' : 's'}</span></div><h2>Size ${esc(r.sizes.join(' / '))}</h2></div>
     <div class="tot"><div class="${wh ? '' : 'zero'}"><div class="v">${wh}</div><div class="l">Warehouse</div></div><div class="${fl ? '' : 'zero'}"><div class="v">${fl}</div><div class="l">Floor</div></div></div></div>
     <div style="overflow-x:auto"><table><thead><tr><th>Product</th><th>Size</th><th>Bin · avail</th><th class="n whcol">Warehouse</th><th class="n">Floor</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${r.rows.slice(0, LIMIT).some(it => it[13]) ? WS_NOTE : ''}
   </section>`;
 }
 function render() {
