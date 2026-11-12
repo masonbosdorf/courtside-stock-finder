@@ -8,90 +8,89 @@ Filename rule: `parent.replace(/[^A-Za-z0-9._-]/g, "_") + ".webp"` in `img/`.
 
 | Brand | Styles | With thumb | % |
 |---|---:|---:|---:|
-| NIKE | 687 | 676 | 98% |
-| JORDAN | 466 | 454 | 97% |
-| NEW ERA | 394 | 306 | 78% |
-| ADIDAS | 191 | 191 | 100% |
-| VOUSETI | 99 | 96 | 97% |
-| FRANK GREEN | 78 | 39 | 50% |
-| FIRST EVER | 73 | 73 | 100% |
-| NEW BALANCE | 64 | 63 | 98% |
-| OUTERSTUFF | 58 | 54 | 93% |
-| PUMA | 57 | 57 | 100% |
-| WAY OF WADE | 52 | 44 | 85% |
-| CROCS | 47 | 47 | 100% |
-| MITCHELL & NESS | 47 | 42 | 89% |
-| RYOKO RAIN | 46 | 44 | 96% |
-| LI-NING | 42 | 42 | 100% |
-| CONVERSE | 38 | 38 | 100% |
+| NIKE | 722 | 720 | 100% |
+| JORDAN | 491 | 484 | 99% |
+| NEW ERA | 387 | 376 | 97% |
+| ADIDAS | 189 | 189 | 100% |
+| VOUSETI | 102 | 92 | 90% |
+| FIRST EVER | 81 | 80 | 99% |
+| FRANK GREEN | 74 | 74 | 100% |
+| NEW BALANCE | 68 | 66 | 97% |
+| WAY OF WADE | 65 | 59 | 91% |
+| OUTERSTUFF | 56 | 52 | 93% |
+| PUMA | 55 | 55 | 100% |
+| LI-NING | 54 | 54 | 100% |
+| CROCS | 46 | 46 | 100% |
+| BUCKETSQUAD | 45 | 45 | 100% |
+| RYOKO RAIN | 43 | 1 | 2% |
+| MITCHELL & NESS | 38 | 33 | 87% |
+| CONVERSE | 27 | 27 | 100% |
+| SPALDING | 24 | 24 | 100% |
 | STANCE | 24 | 24 | 100% |
-| GLOBETROTTERS | 22 | 22 | 100% |
-| SPALDING | 22 | 21 | 95% |
 | SNEAKER LAB | 15 | 15 | 100% |
-| MELIN | 14 | 13 | 93% |
-| BUCKETSQUAD | 8 | 8 | 100% |
+| MELIN | 13 | 12 | 92% |
 | WILSON | 7 | 6 | 86% |
-| **TOTAL** | **2551** | **2375** | **93.1%** |
+| **TOTAL** | **2626** | **2534** | **96.5%** |
 
 ## img/ directory
 
-- files: **18985**
-- size: **32.9 MB**
+- files: **19430**
+- size: **33.7 MB**
 - average thumb: **1.77 KB**
 
 ## How the in-stock hero was found
 
-- `hero`: 1219
-- `style/colour`: 1121
-- `hero-norm`: 25
-- `folder`: 10
+- `hero`: 1303
+- `style/colour`: 1186
+- `hero-norm`: 27
+- `folder`: 18
 
 ## Nike / Jordan view code used (in-stock)
 
 | View code | Count |
 |---|---:|
-| PHSLH000 | 483 |
-| PHSFM001 | 453 |
-| PHSFH001 | 99 |
+| PHSFM001 | 495 |
+| PHSLH000 | 474 |
+| PHSFH001 | 123 |
 | (non-AURORA file) | 57 |
-| PHCFH001 | 19 |
-| PHSBM001 | 7 |
-| PHSLH001 | 3 |
-| PHSBH001 | 3 |
-| PHSYM001 | 2 |
+| PHCFH001 | 24 |
+| PHSLH001 | 9 |
+| PHSBM001 | 9 |
+| PHSBH001 | 4 |
+| PHSYM001 | 3 |
+| PHSYM003 | 2 |
+| PHSRH000 | 2 |
+| PHCYD001 | 1 |
 | PHSUH000 | 1 |
-| PHSBH000 | 1 |
-| PHSYM003 | 1 |
-| PHSRH000 | 1 |
 
-## In-stock parents with no image (176)
+## In-stock parents with no image (92)
 
-Missing by brand: NEW ERA 88, FRANK GREEN 39, JORDAN 12, NIKE 11, WAY OF WADE 8, MITCHELL & NESS 5, OUTERSTUFF 4, VOUSETI 3, RYOKO RAIN 2, SPALDING 1, MELIN 1, NEW BALANCE 1, WILSON 1
+Missing by brand: RYOKO RAIN 42, NEW ERA 11, VOUSETI 10, JORDAN 7, WAY OF WADE 6, MITCHELL & NESS 5, OUTERSTUFF 4, NIKE 2, NEW BALANCE 2, MELIN 1, FIRST EVER 1, WILSON 1
 
 First 20:
 
 | Parent | Brand | Reason |
 |---|---|---|
-| `14144828` | NEW ERA | no-image |
-| `6055/NBL/MEL/2` | SPALDING | no-image |
 | `60684355` | NEW ERA | no-image |
 | `60760731` | NEW ERA | no-image |
-| `60760733` | NEW ERA | no-image |
-| `60760736` | NEW ERA | no-image |
-| `60760740` | NEW ERA | no-image |
-| `60760879` | NEW ERA | no-image |
-| `60839702` | NEW ERA | no-image |
-| `60839704` | NEW ERA | no-image |
-| `60839706` | NEW ERA | no-image |
 | `60839713` | NEW ERA | no-image |
-| `60839715` | NEW ERA | no-image |
-| `60839717` | NEW ERA | no-image |
-| `60839721` | NEW ERA | no-image |
-| `60839723` | NEW ERA | no-image |
 | `60839726` | NEW ERA | no-image |
 | `60839727` | NEW ERA | no-image |
-| `60839728` | NEW ERA | no-image |
-| `60839732` | NEW ERA | no-image |
+| `60839739` | NEW ERA | no-image |
+| `60841783` | NEW ERA | no-image |
+| `60841784` | NEW ERA | no-image |
+| `60842155` | NEW ERA | no-image |
+| `70620-YEJA` | MELIN | no-image |
+| `70959330` | NEW ERA | no-image |
+| `70961793` | NEW ERA | no-image |
+| `9J0633-023` | JORDAN | no-image |
+| `AHSV089-1` | WAY OF WADE | no-image |
+| `AHSVA03-1` | WAY OF WADE | no-image |
+| `AHSVA03-2` | WAY OF WADE | no-image |
+| `AHSVA03-3` | WAY OF WADE | no-image |
+| `AKSV773-3` | WAY OF WADE | no-image |
+| `ATSV061-1` | WAY OF WADE | no-image |
+| `CAR-RED-05-CBK` | RYOKO RAIN | no-image |
 
 ## Errors (1)
 
